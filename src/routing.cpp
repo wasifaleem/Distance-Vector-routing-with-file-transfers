@@ -39,7 +39,7 @@ void send_routing_updates() {
             if (r.type == NEIGHBOUR && (r.status == ACTIVE || r.status == INITIALIZED)) {
                 int sock_fd;
                 struct addrinfo addr;
-                if (util::udp_socket(&sock_fd, r.ip_str, util::to_port_str(r.router_port).c_str(), &addr)
+                if (util::udp_socket(&sock_fd, r.ip_str.c_str(), util::to_port_str(r.router_port).c_str(), &addr)
                     && sendToALL(sock_fd, payload, payload_len, &addr) > 0) {
                     LOG("Sent update to router: " << r.router_id << " " << r.ip_str << ":" << r.router_port);
                     close(sock_fd);
@@ -220,13 +220,13 @@ const routers parse_init(char *buffer) {
         r.data_port = util::ntohui16(buffer, offset);
         r.cost = util::ntohui16(buffer, offset);
         r.ip = util::toui32(buffer, offset);
-        r.ip_str = inet_ntoa(*(struct in_addr *) &r.ip);
+        r.ip_str = std::string(inet_ntoa(*(struct in_addr *) &r.ip));
 
         r.status = INITIALIZED;
         if (r.cost >= INF) {
             r.type = NON_NEIGHBOUR;
         }
-        else if (r.cost == 0 && strcmp(r.ip_str, util::primary_ip().c_str()) == 0) {
+        else if (r.cost == 0 && r.ip_str.compare(util::primary_ip().c_str()) == 0) {
             r.type = SELF;
         } else {
             r.type = NEIGHBOUR;

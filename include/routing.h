@@ -22,7 +22,7 @@ struct router {
     uint16_t data_port;
     uint16_t cost;
     uint32_t ip;
-    char *ip_str;
+    std::string ip_str;
 
     router_type type;
     router_status status;
