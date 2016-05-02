@@ -5,6 +5,7 @@
 #include <vector>
 #include <stdint.h>
 #include <map>
+#include <sys/time.h>
 
 enum router_type {
     NEIGHBOUR,
