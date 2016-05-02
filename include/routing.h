@@ -3,7 +3,7 @@
 
 #include <string>
 #include <vector>
-#include <unitypes.h>
+#include <stdint.h>
 #include <map>
 
 enum router_type {
@@ -70,12 +70,15 @@ const routers parse_init(char *payload);
 
 void send_routing_updates();
 
-void receive_update(int sock_fd);
 
 char *routing_payload();
 
+void receive_update(int sock_fd);
+
 void routing_table_response(int controller_fd);
+
 void update_cost(int controller_fd, char *payload);
+
 void process_update(ROUTING_UPDATE_HEADER *header, std::vector<ROUTING_UPDATE_ENTRY> routing_updates);
 
 router *find_by_port_ip(uint16_t port, uint32_t ip);
