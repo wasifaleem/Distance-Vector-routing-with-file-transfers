@@ -12,6 +12,7 @@
 #include <control_header_lib.h>
 #include <controller.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 typedef uint16_t router_id, cost;
 typedef std::map<router_id, cost> distance_vector; // dv:{ router_id: cost}
@@ -40,7 +41,8 @@ void send_routing_updates() {
                 struct addrinfo addr;
                 if (util::udp_socket(&sock_fd, r.ip_str, util::to_port_str(r.router_port).c_str(), &addr)
                     && sendToALL(sock_fd, payload, payload_len, &addr) > 0) {
-                    LOG("Sent update to router: " << r.router_id);
+                    LOG("Sent update to router: " << r.router_id << " " << r.ip_str << ":" << r.router_port);
+                    close(sock_fd);
                 } else {
                     ERROR("Cannot send routing update to: " << r.ip_str << " err:" << strerror(errno));
                 }

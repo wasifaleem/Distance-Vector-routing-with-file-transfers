@@ -151,13 +151,13 @@ namespace controller {
             Router::set_router_socket(router_fd);
             send_routing_updates();
         } else {
-            ERROR("Cannot create ROUTER socket." << self->router_port);
+            ERROR("Cannot create ROUTER socket: " << self->router_port);
         }
         if (util::bind_listen_on(&data_fd, util::to_port_str(self->data_port).c_str())) {
             LOG("Created DATA socket " << self->data_port);
             Router::set_data_socket(data_fd);
         } else {
-            ERROR("Cannot create DATA socket for listening " << self->data_port);
+            ERROR("Cannot create DATA socket for listening: " << self->data_port);
         }
     }
 }
