@@ -155,7 +155,7 @@ void mark_inactive() {
 void recompute_routing_table() {
     for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
         router &destination = rs.routers[i];
-        if (destination.type != SELF && destination.status == ACTIVE) {
+        if (destination.type != SELF && destination.status != INACTIVE) {
             uint16_t min_cost = INF;
             uint16_t min_next_hop = INF;
             for (std::vector<router>::size_type j = 0; j != rs.routers.size(); j++) {
