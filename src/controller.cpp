@@ -2,80 +2,162 @@
 #include <cstring>
 #include <netinet/in.h>
 #include <global.h>
-#include <arpa/inet.h>
+#include <unistd.h>
+#include <cstdlib>
+#include <set>
+#include <map>
+#include <iostream>
+#include <errno.h>
+#include <Router.h>
+#include <cstdio>
+
+#include "../include/network_util.h"
+#include "../include/control_header_lib.h"
+#include "../include/author.h"
+#include "routing.h"
 
 namespace controller {
-    uint8_t toui8(const char *buffer, unsigned int &offset);
-    uint16_t ntohui16(const char *buffer, unsigned int &offset);
-    uint32_t toui32(const char *buffer, unsigned int &offset);
+    static std::set<int> controller_fds;
 
-    const request_header parse_header(char *buffer) {
-        unsigned offset = 0;
-        struct request_header header;
-        header.ip = toui32(buffer, offset);
-        header.control_code = toui8(buffer, offset);
-        header.response_time = toui8(buffer, offset);
-        header.payload_length = ntohui16(buffer, offset);
-        return header;
-    }
+    void init_response(int fd, char *payload);
 
-    const routers parse_init(char *buffer) {
-        struct routers rs;
-        unsigned offset = 0;
-        rs.router_count = ntohui16(buffer, offset);
-        rs.update_interval = ntohui16(buffer, offset);
-        for (int i = 0; i < rs.router_count; ++i) {
-            struct router r;
-            r.router_id = ntohui16(buffer, offset);
-            r.router_port = ntohui16(buffer, offset);
-            r.data_port = ntohui16(buffer, offset);
-            r.cost = ntohui16(buffer, offset);
-            r.ip = toui32(buffer, offset);
-            r.ip_str = std::string(inet_ntoa(*(struct in_addr *) &r.ip));
-            rs.routers.push_back(r);
+    int do_bind_listen(const char *control_port) {
+        int controller_accept_fd;
+        if (util::bind_listen_on(&controller_accept_fd, control_port)) {
+            LOG("Created CONTROLLER socket.");
+        } else {
+            ERROR("Cannot create CONTROLLER socket for listening.");
+            exit(EXIT_FAILURE);
         }
-        return rs;
+        return controller_accept_fd;
     }
 
-    uint8_t toui8(const char *buffer, unsigned int &offset) {
-        uint8_t ui8 = 0;
-        memcpy(&ui8, buffer + offset, 1);
-        offset += 1;
-        return ui8;
-    }
+    int accept(int controller_accept_fd) {
+        struct sockaddr_storage controller_addr;
+        socklen_t controller_addr_len = sizeof(controller_addr);
+        int new_controller_fd;
 
-    uint16_t ntohui16(const char *buffer, unsigned int &offset) {
-        uint16_t ui16 = 0;
-        memcpy(&ui16, buffer + offset, 2);
-        offset += 2;
-        return ntohs(ui16);
-    }
-
-    uint32_t toui32(const char *buffer, unsigned int &offset) {
-        uint32_t ui32 = 0;
-        memcpy(&ui32, buffer + offset, 4);
-        offset += 4;
-        return ui32;
-    }
-
-    const std::vector<char> response(message_type type, std::string ip, std::vector<char> *payload) {
-        uint8_t payload_size = 0;
-        if (payload != NULL) {
-            payload_size += payload->size();
+        if ((new_controller_fd = accept(controller_accept_fd,
+                                        (struct sockaddr *) &controller_addr,
+                                        &controller_addr_len)) < 0) {
+            ERROR("ACCEPT CONTROLLER" << "fd:" << new_controller_fd << " error:" << strerror(errno));
+        } else {
+            LOG("New controller from ip: " << util::get_ip(controller_addr));
+            controller_fds.insert(new_controller_fd);
         }
-        std::vector<char> resp(sizeof(struct request_header) + payload_size);
-        uint32_t ui32;
-        uint8_t ui8 = 0;
+        return new_controller_fd;
+    }
 
-        inet_aton(ip.c_str(), (in_addr *) &ui32);
-        memcpy(&resp[0], &ui32, 4);
-        memcpy(&resp[4], &type, 1);
-        memcpy(&resp[5], &ui8, 1);
-        uint16_t ps = htons(payload_size);
-        memcpy(&resp[6], &ps, 2);
-        if (payload != NULL) {
-            memcpy(&resp[8], &(*payload)[0], payload_size);
+    void close_fd(int controller_fd) {
+        LOG("CONTROLLER: leaving " << controller_fd);
+        controller_fds.erase(controller_fd);
+        close(controller_fd);
+    }
+
+    bool is_set(int controller_fd) {
+        return controller_fds.count(controller_fd) > 0;
+    }
+
+    void crash_now(int fd);
+
+    bool receive(int controller_fd) {
+
+        char *cntrl_header, *cntrl_payload;
+        uint8_t control_code;
+        uint16_t payload_len;
+
+        /* Get control header */
+        cntrl_header = (char *) malloc(sizeof(char) * CNTRL_HEADER_SIZE);
+        bzero(cntrl_header, CNTRL_HEADER_SIZE);
+
+        if (recvALL(controller_fd, cntrl_header, CNTRL_HEADER_SIZE) < 0) {
+            free(cntrl_header);
+            close_fd(controller_fd);
+            return false;
         }
-        return resp;
+
+        struct CONTROL_HEADER *header = (struct CONTROL_HEADER *) cntrl_header;
+        control_code = header->control_code;
+        payload_len = ntohs(header->payload_len);
+
+        free(cntrl_header);
+
+        /* Get control payload */
+        if (payload_len != 0) {
+            cntrl_payload = (char *) malloc(sizeof(char) * payload_len);
+            bzero(cntrl_payload, payload_len);
+
+            if (recvALL(controller_fd, cntrl_payload, payload_len) < 0) {
+                free(cntrl_payload);
+                close_fd(controller_fd);
+            }
+        }
+
+        /* Triage on control_code */
+        message_type t = static_cast<message_type>(control_code);
+        switch (t) {
+            case AUTHOR: {
+                author_response(controller_fd);
+                break;
+            }
+            case INIT: {
+                init_response(controller_fd, cntrl_payload);
+                break;
+            }
+            case ROUTING_TABLE: {
+                routing_table_response(controller_fd);
+                break;
+            }
+            case UPDATE: {
+                update_cost(controller_fd, cntrl_payload);
+                break;
+            }
+            case CRASH: {
+                crash_now(controller_fd);
+                break;
+            }
+            case SENDFILE:
+                break;
+            case SENDFILE_STATS:
+                break;
+            case LAST_DATA_PACKET:
+                break;
+            case PENULTIMATE_DATA_PACKET:
+                break;
+        }
+
+        if (payload_len != 0) free(cntrl_payload);
+        return true;
+    }
+
+    void crash_now(int fd) {
+        char *cntrl_response = create_response_header(fd, CRASH, 0, 0);
+        sendALL(fd, cntrl_response, CNTRL_RESP_HEADER_SIZE);
+        free(cntrl_response);
+        LOG("Goodbye!");
+        exit(EXIT_SUCCESS);
+    }
+
+    void init_response(int fd, char *payload) {
+        char *cntrl_response = create_response_header(fd, INIT, 0, 0);
+        sendALL(fd, cntrl_response, CNTRL_RESP_HEADER_SIZE);
+        parse_init(payload);
+        free(cntrl_response);
+
+        int router_fd, data_fd;
+        const router *self = get_self();
+        if (util::bind_to(&router_fd, util::to_port_str(self->router_port).c_str(), SOCK_DGRAM)) {
+            LOG("Created ROUTER socket " << self->router_port);
+            Router::set_router_socket(router_fd);
+            send_routing_updates();
+        } else {
+            ERROR("Cannot create ROUTER socket." << self->router_port);
+        }
+        if (util::bind_listen_on(&data_fd, util::to_port_str(self->data_port).c_str())) {
+            LOG("Created DATA socket " << self->data_port);
+            Router::set_data_socket(data_fd);
+        } else {
+            ERROR("Cannot create DATA socket for listening " << self->data_port);
+        }
     }
 }

@@ -6,8 +6,11 @@
 #include <iostream>
 #include <cstring>
 #include <sstream>
+#include <cstdio>
 
 namespace util {
+    static std::string primary_ip_str;
+
     const bool valid_inet(const std::string ip) {
         struct sockaddr_in sa;
         return inet_pton(AF_INET, ip.c_str(), &(sa.sin_addr)) != 0;
@@ -131,6 +134,49 @@ namespace util {
         freeaddrinfo(result);
 
         if (temp == NULL) {
+            ERROR("Cannot find a socket to connect to, errno: " << strerror(errno));
+            return false;
+        }
+
+        return true;
+    }
+
+    bool bind_to(int *sock_fd, const char *port, int ai_socktype) {
+        struct addrinfo *result, *temp;
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(struct addrinfo));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = ai_socktype;
+        hints.ai_flags = AI_PASSIVE;
+
+        int getaddrinfo_result;
+        int reuse = 1;
+        if ((getaddrinfo_result = getaddrinfo(NULL, port, &hints, &result)) != 0) {
+            ERROR("getaddrinfo: " << gai_strerror(getaddrinfo_result));
+            return false;
+        }
+
+        for (temp = result; temp != NULL; temp = temp->ai_next) {
+            *sock_fd = socket(temp->ai_family, temp->ai_socktype, temp->ai_protocol);
+            if (*sock_fd == -1)
+                continue;
+
+            if (setsockopt(*sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1) {
+                ERROR("Cannot setsockopt() on: " << *sock_fd << "  error: " << strerror(errno));
+                close(*sock_fd);
+                continue;
+            }
+
+            if (bind(*sock_fd, temp->ai_addr, temp->ai_addrlen) == -1) {
+                close(*sock_fd);
+                ERROR("Cannot bind to " << port << " errno:" << strerror(errno));
+                continue;
+            }
+            break;
+        }
+        freeaddrinfo(result);
+
+        if (temp == NULL) {
             ERROR("Cannot find a socket to bind to, errno: " << strerror(errno));
             return false;
         }
@@ -138,36 +184,97 @@ namespace util {
         return true;
     }
 
-    const std::string primary_ip() {
-        int sock_fd = 0;
+    bool udp_socket(int *sock_fd, const char *ip, const char *port, struct addrinfo *ret) {
+        struct addrinfo *result, *temp;
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(struct addrinfo));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_DGRAM;
 
-        if (connect_to(&sock_fd, "8.8.8.8", "53", SOCK_DGRAM)) {
-            struct sockaddr_storage in;
-            socklen_t in_len = sizeof(in);
-
-            if (getsockname(sock_fd, (struct sockaddr *) &in, &in_len) == -1) {
-                ERROR("Cannot getsockname on: " << sock_fd << ", error: " << strerror(errno));
-                return EMPTY_STRING;
-            }
-
-            if (sock_fd != 0) {
-                close(sock_fd);
-            }
-            return get_ip(in);
+        int getaddrinfo_result;
+        if ((getaddrinfo_result = getaddrinfo(ip, port, &hints, &result)) != 0) {
+            ERROR("getaddrinfo: " << gai_strerror(getaddrinfo_result));
+            return false;
         }
-        return EMPTY_STRING;
+
+        for (temp = result; temp != NULL; temp = temp->ai_next) {
+            *sock_fd = socket(temp->ai_family, temp->ai_socktype, temp->ai_protocol);
+            if (*sock_fd == -1) {
+                continue;
+            }
+
+            break;
+        }
+        freeaddrinfo(result);
+        if (temp == NULL) {
+            ERROR("Cannot create a socket, errno: " << strerror(errno));
+            return false;
+        }
+        *ret = *temp;
+
+        return true;
+    }
+
+    const std::string primary_ip() {
+        if (primary_ip_str.empty()) {
+            int sock_fd = 0;
+
+            if (connect_to(&sock_fd, "8.8.8.8", "53", SOCK_DGRAM)) {
+                struct sockaddr_storage in;
+                socklen_t in_len = sizeof(in);
+
+                if (getsockname(sock_fd, (struct sockaddr *) &in, &in_len) == -1) {
+                    ERROR("Cannot getsockname on: " << sock_fd << ", error: " << strerror(errno));
+                    return EMPTY_STRING;
+                }
+
+                if (sock_fd != 0) {
+                    close(sock_fd);
+                }
+                primary_ip_str = get_ip(in);
+            }
+        }
+        return primary_ip_str;
     }
 
 
-    const uint16_t ntouint16(const void *buffer) {
-        uint16_t i = 0;
-        memcpy(&i, buffer, 2);
-        return ntohs(i);
+    const uint8_t toui8(const char *buffer, unsigned int &offset) {
+        uint8_t ui8 = 0;
+        memcpy(&ui8, buffer + offset, 1);
+        offset += 1;
+        return ui8;
     }
 
-    const uint8_t touint8(const void *buffer) {
-        uint8_t i = 0;
-        memcpy(&i, buffer, 1);
-        return (i);
+    const uint16_t ntohui16(const char *buffer, unsigned int &offset) {
+        uint16_t ui16 = 0;
+        memcpy(&ui16, buffer + offset, 2);
+        offset += 2;
+        return ntohs(ui16);
     }
+
+    const uint32_t toui32(const char *buffer, unsigned int &offset) {
+        uint32_t ui32 = 0;
+        memcpy(&ui32, buffer + offset, 4);
+        offset += 4;
+        return ui32;
+    }
+
+    const std::string log_time() {
+        time_t t = time(0);
+        return time_str(t);
+    }
+
+    const std::string time_str(time_t t) {
+        char buff[10];
+        strftime(buff, sizeof(buff), "%H:%M:%S", gmtime(&t));
+        return std::string(buff);
+    }
+
+    const std::string to_port_str(uint16_t port) {
+        char buffer[50];
+        snprintf(buffer, 50, "%d", port);
+        return std::string(buffer);
+    }
+
+
 }

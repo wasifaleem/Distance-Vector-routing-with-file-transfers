@@ -10,39 +10,15 @@ namespace controller {
         AUTHOR, INIT, ROUTING_TABLE, UPDATE, CRASH, SENDFILE, SENDFILE_STATS, LAST_DATA_PACKET, PENULTIMATE_DATA_PACKET
     };
 
-    struct request_header {
-        uint32_t ip;
-        uint8_t control_code;
-        uint8_t response_time;
-        uint16_t payload_length;
-    };
+    int do_bind_listen(const char *control_port);
 
-    struct router {
-        uint16_t router_id;
-        uint16_t router_port;
-        uint16_t data_port;
-        uint16_t cost;
-        uint32_t ip;
-        std::string ip_str;
-    };
+    int accept(int controller_fd);
 
-    struct routers {
-        uint16_t router_count;
-        uint16_t update_interval;
-        std::vector<router> routers;
-    };
+    bool receive(int controller_fd);
 
-//    struct response_header {
-//        uint32_t ip;
-//        uint8_t control_code;
-//        uint8_t response_code;
-//        uint16_t payload_length;
-//    };
+    void close_fd(int controller_fd);
 
-    const request_header parse_header(char *buffer);
+    bool is_set(int controller_fd);
 
-    const routers parse_init(char *buffer);
-
-    const std::vector<char> response(message_type type, std::string ip, std::vector<char> *payload);
 }
 #endif //CONTROLLER_H
