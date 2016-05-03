@@ -77,6 +77,7 @@ namespace data {
                             memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             delete[](data_payload_buff);
 
+                            receive(data_fd);
                             sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
                             update_last_data_packet(data_pkt);
                         }
