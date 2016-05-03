@@ -77,7 +77,7 @@ namespace data {
                             memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             delete[](data_payload_buff);
 
-                            receive(data_fd);
+                            while (receive(data_fd)) { };
                             sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
                             update_last_data_packet(data_pkt);
                         }
@@ -134,12 +134,20 @@ namespace data {
         bool received = false;
         while (true) {
 
+            char *data_full_buff = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
+
+            if (recvALL(data_fd, data_full_buff, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE,
+                        MSG_DONTWAIT | MSG_PEEK) != (DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE)) {
+                delete[](data_full_buff);
+                return false;
+            }
+            delete[](data_full_buff);
+
             char *data_header_buff = new char[DATA_PACKET_HEADER_SIZE];
             bzero(data_header_buff, DATA_PACKET_HEADER_SIZE);
 
-            if (recvALL(data_fd, data_header_buff, DATA_PACKET_HEADER_SIZE, MSG_DONTWAIT) < 0) {
+            if (recvALL(data_fd, data_header_buff, DATA_PACKET_HEADER_SIZE, 0) < 0) {
                 delete[](data_header_buff);
-//                close_fd(data_fd);
                 return received;
             } else {
                 received = true;
@@ -150,7 +158,6 @@ namespace data {
 
             if (recvALL(data_fd, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE, 0) < 0) {
                 delete[](data_payload_buff);
-//                close_fd(data_fd);
                 return false;
             }
 
@@ -205,7 +212,6 @@ namespace data {
 
                                 sendALL(next_hop_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
                                 update_last_data_packet(data_pkt);
-//                            close(next_hop_fd);
                                 LOG("FWD data pkt id:" << transfer_id << " seq:" <<
                                     ((int) ntohs(data_header->seq_no)) << " ttl:" <<
                                     ((int) data_header->ttl));
