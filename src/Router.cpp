@@ -33,7 +33,7 @@ void Router::select_loop() {
 
         if (selret < 0) {
             ERROR("SELECT error:" << strerror(errno));
-            exit(EXIT_FAILURE);
+//            exit(EXIT_FAILURE);
         } else if (selret == 0) {
             timeout_handler();
             start.tv_sec = update_interval_start;

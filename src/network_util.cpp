@@ -26,25 +26,42 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <global.h>
+#include <iostream>
+#include <errno.h>
+#include <cstring>
 
-ssize_t recvALL(int sock_index, char *buffer, ssize_t nbytes) {
-    ssize_t bytes = 0;
-    bytes = recv(sock_index, buffer, nbytes, 0);
+ssize_t recvALL(int sock_index, char *buffer, ssize_t nbytes, int flags) {
+    ssize_t bytes = 0, n = 0;
+    bytes = recv(sock_index, buffer, nbytes, flags);
 
     if (bytes == 0 || bytes == -1) return -1;
-    while (bytes < nbytes)
-        bytes += recv(sock_index, buffer + bytes, nbytes - bytes, 0);
+    while (bytes < nbytes) {
+        n = recv(sock_index, buffer + bytes, nbytes - bytes, flags);
+        if (n <= 0) {
+            ERROR("recvALL: " << strerror(errno));
+            return -1;
+        }
+        bytes += n;
+    }
 
     return bytes;
 }
 
 ssize_t sendALL(int sock_index, char *buffer, ssize_t nbytes) {
-    ssize_t bytes = 0;
+    ssize_t bytes = 0, n = 0;
     bytes = send(sock_index, buffer, nbytes, 0);
 
     if (bytes == 0 || bytes == -1) return -1;
-    while (bytes < nbytes)
-        bytes += send(sock_index, buffer + bytes, nbytes - bytes, 0);
+    while (bytes < nbytes) {
+        n += send(sock_index, buffer + bytes, nbytes - bytes, 0);
+        if (n <= 0) {
+            ERROR("sendALL: " << strerror(errno));
+//            return -1;
+        } else if (n > 0) {
+            bytes += n;
+        }
+    }
 
     return bytes;
 }
