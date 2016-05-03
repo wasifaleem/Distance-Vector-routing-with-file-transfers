@@ -37,9 +37,11 @@ namespace data {
         if (route != NULL && route->cost != INF) {
             router *next_hop = find_by_id(route->next_hop_id);
             if (next_hop != NULL) {
-                int data_fd = 0;
-                if (util::connect_to(&data_fd, next_hop->ip_str.c_str(), util::to_port_str(next_hop->data_port).c_str(),
+                int data_fd = next_hop->data_socket_fd;
+                if (data_fd != 0 ||
+                    util::connect_to(&data_fd, next_hop->ip_str.c_str(), util::to_port_str(next_hop->data_port).c_str(),
                                      SOCK_STREAM)) {
+                    next_hop->data_socket_fd = data_fd;
                     long file_size;
                     std::ifstream file(filename.c_str(), std::ios::in | std::ios::binary | std::ios::ate);
                     if (file.is_open()) {
@@ -81,7 +83,7 @@ namespace data {
                         file.close();
                         LOG("Sent file " << filename << " in " << num_packets << " chunks.");
                     }
-                    close(data_fd);
+//                    close(data_fd);
                 } else {
                     ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
                           route->next_hop_id);
@@ -150,7 +152,8 @@ namespace data {
         // decrement TTL
         data_header->ttl -= 1;
         // update stats
-        stats[data_header->transfer_id].insert(std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
+        stats[data_header->transfer_id].insert(
+                std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
         int transfer_id = (int) data_header->transfer_id;
 
         const router *self = get_self();
@@ -169,7 +172,7 @@ namespace data {
                 file_data[data_header->transfer_id].clear();
                 LOG("RECEIVED file: " << file_name);
             } else {
-                LOG("RECEIVED seq-no: " << ntohs(data_header->seq_no) << " of transfer: " << transfer_id);
+                LOG("RECEIVED seq-no: " << ((int) ntohs(data_header->seq_no)) << " of transfer: " << transfer_id);
             }
         } else { // Forward to next hop
             if (data_header->ttl == 0) {
@@ -181,11 +184,11 @@ namespace data {
                 if (route != NULL && route->cost != INF) {
                     router *next_hop = find_by_id(route->next_hop_id);
                     if (next_hop != NULL) {
-                        int data_fd = 0;
-                        if (util::connect_to(&data_fd, next_hop->ip_str.c_str(),
-                                             util::to_port_str(next_hop->data_port).c_str(),
-                                             SOCK_STREAM)) {
-
+                        int next_hop_fd = next_hop->data_socket_fd;
+                        if (next_hop_fd != 0 || util::connect_to(&next_hop_fd, next_hop->ip_str.c_str(),
+                                                             util::to_port_str(next_hop->data_port).c_str(),
+                                                             SOCK_STREAM)) {
+                            next_hop->data_socket_fd = next_hop_fd;
                             char *data_pkt = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
                             /* Copy Header */
                             memcpy(data_pkt, data_header_buff, DATA_PACKET_HEADER_SIZE);
@@ -194,11 +197,11 @@ namespace data {
                             memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             delete[](data_payload_buff);
 
-                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+                            sendALL(next_hop_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
                             update_last_data_packet(data_pkt);
-                            close(data_fd);
-                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ntohs(data_header->seq_no) << " ttl:" <<
-                                data_header->ttl);
+//                            close(next_hop_fd);
+                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ((int)ntohs(data_header->seq_no)) << " ttl:" <<
+                                ((int)data_header->ttl));
                         } else {
                             ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
                                   route->next_hop_id);
@@ -209,7 +212,8 @@ namespace data {
                     }
                 } else {
                     // Should not happen, assume dest exists
-                    ERROR("Cannot find route/INF for: " << std::string(inet_ntoa(*(struct in_addr *) &data_header->dest_ip)));
+                    ERROR("Cannot find route/INF for: " <<
+                          std::string(inet_ntoa(*(struct in_addr *) &data_header->dest_ip)));
                 }
             }
         }

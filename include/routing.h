@@ -27,6 +27,7 @@ struct router {
     router_type type;
     router_status status;
     timeval last_update;
+    int data_socket_fd;
 };
 
 struct routers {
@@ -70,7 +71,7 @@ const router *get_self();
 const routers parse_init(char *payload);
 
 void send_routing_updates();
-
+void connect_data_ports();
 
 char *routing_payload();
 

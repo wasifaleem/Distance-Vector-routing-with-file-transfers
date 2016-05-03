@@ -126,6 +126,7 @@ void timeout_handler() {
         update_counter++;
         if (update_counter == rs.update_interval) {
             send_routing_updates();
+            connect_data_ports();
             update_counter = 0;
         }
     }
@@ -245,6 +246,7 @@ const routers parse_init(char *buffer) {
         r.ip_str = std::string(inet_ntoa(*(struct in_addr *) &r.ip));
 
         r.status = INITIALIZED;
+        r.data_socket_fd = 0;
         if (r.cost >= INF) {
             r.type = NON_NEIGHBOUR;
         }
@@ -348,6 +350,24 @@ void update_cost(int controller_fd, char *payload) {
 //    routing_table[id] = (struct route) {INF, INF}; // TODO: need this?
     recompute_routing_table();
 }
+
+void connect_data_ports() {
+    for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
+        if (rs.routers[i].status != INACTIVE
+            && rs.routers[i].type == NEIGHBOUR
+            && rs.routers[i].data_socket_fd == 0) {
+            if (util::connect_to(&rs.routers[i].data_socket_fd, rs.routers[i].ip_str.c_str(),
+                                 util::to_port_str(rs.routers[i].data_port).c_str(),
+                                 SOCK_STREAM)) {
+
+            } else {
+                ERROR("Cannot connect to data port " << rs.routers[i].data_port << " of router by id: " <<
+                      rs.routers[i].router_id);
+            }
+        }
+    }
+}
+
 
 
 
