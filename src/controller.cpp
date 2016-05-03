@@ -15,6 +15,7 @@
 #include "../include/control_header_lib.h"
 #include "../include/author.h"
 #include "routing.h"
+#include "data_routing.h"
 
 namespace controller {
     static std::set<int> controller_fds;
@@ -116,8 +117,10 @@ namespace controller {
                 crash_now(controller_fd);
                 break;
             }
-            case SENDFILE:
+            case SENDFILE: {
+                data::sendfile(controller_fd, cntrl_payload, payload_len);
                 break;
+            }
             case SENDFILE_STATS:
                 break;
             case LAST_DATA_PACKET:

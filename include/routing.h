@@ -88,4 +88,7 @@ void recompute_routing_table();
 
 void timeout_handler();
 
+router *find_by_id(uint16_t id);
+route *route_for_destination(uint32_t ip);
+
 #endif //ROUTING_UPDATE_H

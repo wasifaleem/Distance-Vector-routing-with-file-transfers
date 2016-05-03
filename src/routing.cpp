@@ -188,6 +188,28 @@ router *find_by_port_ip(uint16_t port, uint32_t ip) {
     return NULL;
 }
 
+router *find_by_id(uint16_t id) {
+    for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
+        if (rs.routers[i].router_id == id) {
+            return &rs.routers[i];
+        }
+    }
+    return NULL;
+}
+
+route *route_for_destination(uint32_t ip) {
+    for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
+        struct router r = rs.routers[i];
+        if (r.ip == ip) {
+            LOG("Route for " << r.router_id << " : " << r.ip_str << " via: " <<
+                routing_table[r.router_id].next_hop_id << " cost: " <<
+                routing_table[r.router_id].cost);
+            return &routing_table[r.router_id];
+        }
+    }
+    return NULL;
+}
+
 char *routing_payload() {
     char *payload = new char[ROUTING_UPDATE_HEADER_SIZE + (rs.router_count * ROUTING_UPDATE_ENTRY_SIZE)];
     bzero(payload, ROUTING_UPDATE_HEADER_SIZE + (rs.router_count * ROUTING_UPDATE_ENTRY_SIZE));
@@ -326,6 +348,8 @@ void update_cost(int controller_fd, char *payload) {
 //    routing_table[id] = (struct route) {INF, INF}; // TODO: need this?
     recompute_routing_table();
 }
+
+
 
 
 

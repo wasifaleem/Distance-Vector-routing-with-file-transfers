@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <cstring>
 #include <routing.h>
+#include <data_routing.h>
 
 static int control_socket, router_socket, data_socket, max_fd;
 static time_t update_interval_start = 1;
@@ -51,7 +52,11 @@ void Router::select_loop() {
                         receive_update(router_socket);
                     }
                     else if (sock_index == data_socket) { /* data_socket */
-                        //new_data_conn(sock_index);
+                        fd_accept = data::new_data_conn(sock_index);
+
+                        /* Add to watched socket list */
+                        FD_SET(fd_accept, &all_fd);
+                        if (fd_accept > max_fd) max_fd = fd_accept;
                     }
                     else {
                         /* Existing connection */
@@ -60,7 +65,11 @@ void Router::select_loop() {
                                 FD_CLR(sock_index, &all_fd);
                             }
                         }
-                            //else if isData(sock_index);
+                        else if (data::is_set(sock_index)) {
+                            if (!data::receive(sock_index)) {
+                                FD_CLR(sock_index, &all_fd);
+                            }
+                        }
                         else {
                             ERROR("Unknown socket index");
                         }
