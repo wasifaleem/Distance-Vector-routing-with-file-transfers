@@ -77,8 +77,25 @@ namespace data {
                             memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             delete[](data_payload_buff);
 
-                            while (receive(data_fd)) { };
-                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+                            ssize_t bytes = 0, n = 0;
+
+                            bytes = send(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, MSG_DONTWAIT);
+
+                            int flags = MSG_DONTWAIT;
+                            while (bytes < DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE) {
+                                n += send(data_fd, data_pkt + bytes,
+                                          (DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE) - bytes, flags);
+                                if (n <= 0) {
+                                    ERROR("sendALL: " << strerror(errno));
+                                    flags =0;
+                                    while (receive(data_fd)) { };
+                                } else if (n > 0) {
+                                    bytes += n;
+                                    flags = MSG_DONTWAIT;
+                                }
+                            }
+
+//                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
                             update_last_data_packet(data_pkt);
                         }
                         file.close();
