@@ -9,7 +9,6 @@
 
 #define DATA_PACKET_HEADER_SIZE 12
 #define DATA_PACKET_PAYLOAD_SIZE 1024
-#define DATA_PACKET_SIZE (DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE)
 
 namespace data {
     struct __attribute__((__packed__)) SENDFILE_PAYLOAD_HEADER {
@@ -19,14 +18,13 @@ namespace data {
         uint16_t init_seq_no;
     };
 
-    struct __attribute__((__packed__)) DATA_PACKET {
+    struct __attribute__((__packed__)) DATA_PACKET_HEADER {
         uint32_t dest_ip;
         uint8_t transfer_id;
         uint8_t ttl;
         uint16_t seq_no;
         unsigned fin:1;
         unsigned padding:31;
-        char payload[DATA_PACKET_PAYLOAD_SIZE]; // payload is always 1024!
     };
 
     void sendfile(int sock_fd, char *payload, uint16_t ctrl_payload_len);

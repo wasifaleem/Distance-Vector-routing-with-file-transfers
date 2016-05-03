@@ -47,25 +47,36 @@ namespace data {
                         long num_packets = file_size / DATA_PACKET_PAYLOAD_SIZE;
                         file.seekg(0, std::ios::beg);
                         for (int i = 0; i < num_packets; ++i) {
-                            char *data_payload = new char[DATA_PACKET_SIZE];
-                            bzero(data_payload, DATA_PACKET_SIZE);
                             stats[copy.transfer_id].insert(
                                     std::pair<uint8_t, uint16_t>(copy.init_ttl, copy.init_seq_no));
-
-                            struct DATA_PACKET *data_packet = (struct DATA_PACKET *) (data_payload);
-                            data_packet->dest_ip = copy.dest_ip;
-                            data_packet->transfer_id = copy.transfer_id;
-                            data_packet->ttl = copy.init_ttl;
-                            data_packet->seq_no = htons(copy.init_seq_no++);
+                            char *data_header_buff = new char[DATA_PACKET_HEADER_SIZE];
+                            bzero(data_header_buff, DATA_PACKET_HEADER_SIZE);
+                            struct DATA_PACKET_HEADER *data_header = (struct DATA_PACKET_HEADER *) (data_header_buff);
+                            data_header->dest_ip = copy.dest_ip;
+                            data_header->transfer_id = copy.transfer_id;
+                            data_header->ttl = copy.init_ttl;
+                            data_header->seq_no = htons(copy.init_seq_no++);
                             if (i == (num_packets - 1)) {
-                                data_packet->fin = 1;
+                                data_header->fin = 1;
                             } else {
-                                data_packet->fin = 0;
+                                data_header->fin = 0;
                             }
-                            data_packet->padding = 0;
-                            file.read(data_packet->payload, DATA_PACKET_PAYLOAD_SIZE);
-                            sendALL(data_fd, data_payload, DATA_PACKET_SIZE);
-                            update_last_data_packet(data_payload);
+                            data_header->padding = 0;
+
+                            char *data_payload_buff = new char[DATA_PACKET_PAYLOAD_SIZE];
+                            bzero(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
+                            file.read(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
+
+                            char *data_pkt = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
+                            /* Copy Header */
+                            memcpy(data_pkt, data_header_buff, DATA_PACKET_HEADER_SIZE);
+                            delete[](data_header_buff);
+                            /* Copy Payload */
+                            memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
+                            delete[](data_payload_buff);
+
+                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+                            update_last_data_packet(data_pkt);
                         }
                         file.close();
                         LOG("Sent file " << filename << " in " << num_packets << " chunks.");
@@ -117,47 +128,56 @@ namespace data {
     }
 
     bool receive(int data_fd) {
-        char *data_packet = new char[DATA_PACKET_SIZE];
-        bzero(data_packet, DATA_PACKET_SIZE);
+        char *data_header_buff = new char[DATA_PACKET_HEADER_SIZE];
+        bzero(data_header_buff, DATA_PACKET_HEADER_SIZE);
 
-        if (recvALL(data_fd, data_packet, DATA_PACKET_SIZE) < 0) {
-            delete[](data_packet);
+        if (recvALL(data_fd, data_header_buff, DATA_PACKET_HEADER_SIZE) < 0) {
+            delete[](data_header_buff);
             close_fd(data_fd);
             return false;
         }
 
-        struct DATA_PACKET *data = (struct DATA_PACKET *) data_packet;
+        char *data_payload_buff = new char[DATA_PACKET_PAYLOAD_SIZE];
+        bzero(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
+
+        if (recvALL(data_fd, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE) < 0) {
+            delete[](data_payload_buff);
+            close_fd(data_fd);
+            return false;
+        }
+
+        struct DATA_PACKET_HEADER *data_header = (struct DATA_PACKET_HEADER *) data_header_buff;
         // decrement TTL
-        data->ttl -= 1;
+        data_header->ttl -= 1;
         // update stats
-        stats[data->transfer_id].insert(std::pair<uint8_t, uint16_t>(data->ttl, ntohs(data->seq_no)));
-        int transfer_id = (int) data->transfer_id;
+        stats[data_header->transfer_id].insert(std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
+        int transfer_id = (int) data_header->transfer_id;
 
         const router *self = get_self();
-        if (self->ip == data->dest_ip) {
-            file_data[data->transfer_id].insert(file_data[data->transfer_id].end(), data->payload,
-                                                data->payload + DATA_PACKET_PAYLOAD_SIZE);
-            if (data->fin) {
+        if (self->ip == data_header->dest_ip) {
+            file_data[data_header->transfer_id].insert(file_data[data_header->transfer_id].end(), data_payload_buff,
+                                                       data_payload_buff + DATA_PACKET_PAYLOAD_SIZE);
+            if (data_header->fin) {
                 std::stringstream ss;
                 ss << "file-" << transfer_id;
                 std::string file_name = ss.str();
                 // write file data.
                 std::ofstream os(file_name.c_str(), std::ios::binary | std::ios::out | std::ios::trunc);
-                std::copy(file_data[data->transfer_id].begin(), file_data[data->transfer_id].end(),
+                std::copy(file_data[data_header->transfer_id].begin(), file_data[data_header->transfer_id].end(),
                           std::ostreambuf_iterator<char>(os));
                 os.close();
-                file_data[data->transfer_id].clear();
+                file_data[data_header->transfer_id].clear();
                 LOG("RECEIVED file: " << file_name);
             } else {
-                LOG("RECEIVED seq-no: " << ntohs(data->seq_no) << " of transfer: " << transfer_id);
+                LOG("RECEIVED seq-no: " << ntohs(data_header->seq_no) << " of transfer: " << transfer_id);
             }
         } else { // Forward to next hop
-            if (data->ttl == 0) {
-                LOG("Drop data pkt: end of TTL for id:" << transfer_id << " seq:" << ntohs(data->seq_no));
-                delete[](data_packet);
+            if (data_header->ttl == 0) {
+                LOG("Drop data pkt: end of TTL for id:" << transfer_id << " seq:" << ntohs(data_header->seq_no));
+                delete[](data_header_buff);
                 return true;
             } else {
-                route *route = route_for_destination(data->dest_ip);
+                route *route = route_for_destination(data_header->dest_ip);
                 if (route != NULL && route->cost != INF) {
                     router *next_hop = find_by_id(route->next_hop_id);
                     if (next_hop != NULL) {
@@ -165,11 +185,20 @@ namespace data {
                         if (util::connect_to(&data_fd, next_hop->ip_str.c_str(),
                                              util::to_port_str(next_hop->data_port).c_str(),
                                              SOCK_STREAM)) {
-                            sendALL(data_fd, data_packet, DATA_PACKET_SIZE);
-                            update_last_data_packet(data_packet);
+
+                            char *data_pkt = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
+                            /* Copy Header */
+                            memcpy(data_pkt, data_header_buff, DATA_PACKET_HEADER_SIZE);
+                            delete[](data_header_buff);
+                            /* Copy Payload */
+                            memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
+                            delete[](data_payload_buff);
+
+                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+                            update_last_data_packet(data_pkt);
                             close(data_fd);
-                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ntohs(data->seq_no) << " ttl:" <<
-                                data->ttl);
+                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ntohs(data_header->seq_no) << " ttl:" <<
+                                data_header->ttl);
                         } else {
                             ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
                                   route->next_hop_id);
@@ -180,7 +209,7 @@ namespace data {
                     }
                 } else {
                     // Should not happen, assume dest exists
-                    ERROR("Cannot find route/INF for: " << std::string(inet_ntoa(*(struct in_addr *) &data->dest_ip)));
+                    ERROR("Cannot find route/INF for: " << std::string(inet_ntoa(*(struct in_addr *) &data_header->dest_ip)));
                 }
             }
         }
