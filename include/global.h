@@ -14,8 +14,8 @@
 #endif //GLOBAL_H
 
 #ifdef DEBUG
-#define LOG(str) do { std::cout << util::log_time()  << "T " << std::setw(4) << __LINE__  << "L " << str << std::endl; } while( false )
-#define ERROR(str) do { std::cout << "\033[31;1m" << util::log_time()  << "T " << std::setw(4) << __LINE__  << "L " << str <<"\033[0m" << std::endl; } while( false )
+#define LOG(str) do { std::cout << util::log_time()  << "T " << std::setw(4) << __LINE__  << "L " << str << '\n'; } while( false )
+#define ERROR(str) do { std::cout << "\033[31;1m" << util::log_time()  << "T " << std::setw(4) << __LINE__  << "L " << str <<"\033[0m" << '\n'; } while( false )
 #else
 #define LOG(str) do { } while ( false )
 #define ERROR(str) do { } while ( false )
