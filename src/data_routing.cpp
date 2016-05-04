@@ -16,12 +16,24 @@
 #include <cstring>
 #include <errno.h>
 #include <sstream>
+#include <queue>
+#include <cstdlib>
 
 namespace data {
     static std::set<int> data_fds;
     static std::map<uint8_t, std::set<std::pair<uint8_t, uint16_t> > > stats; // <transfer_id, {(ttl, seq_no)}>
     static char *last = NULL, *penultimate = NULL;
     static std::map<uint8_t, std::vector<char> > file_data; // <transfer_id, [bytes]>
+
+    struct file_chunk {
+        struct DATA_PACKET_HEADER header;
+        char *payload;
+        bool is_origin;
+        int controller_fd;
+        ssize_t sent;
+    };
+
+    static std::map<int, std::queue<struct file_chunk> > send_buffer;
 
     void update_last_data_packet(char *payload);
 
@@ -77,8 +89,11 @@ namespace data {
                             memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             delete[](data_payload_buff);
 
-                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
-                            update_last_data_packet(data_pkt);
+                            send_buffer[data_fd].push(
+                                    (struct file_chunk) {*data_header, data_pkt, true, controller_fd, 0});
+
+//                            sendALL(data_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+//                            update_last_data_packet(data_pkt);
                         }
                         file.close();
                         LOG("Sent file " << filename << " in " << num_packets << " chunks.");
@@ -96,11 +111,6 @@ namespace data {
             // Should not happen, assume dest exists
             ERROR("Cannot find route/INF for: " << std::string(inet_ntoa(*(struct in_addr *) &copy.dest_ip)));
         }
-
-        // send controller response
-        char *cntrl_response_header = create_response_header(controller_fd, controller::SENDFILE, 0, 0);
-        sendALL(controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-        delete[](cntrl_response_header);
     }
 
     int new_data_conn(int sock_index) {
@@ -197,8 +207,10 @@ namespace data {
                             memcpy(data_pkt + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             delete[](data_payload_buff);
 
-                            sendALL(next_hop_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
-                            update_last_data_packet(data_pkt);
+                            send_buffer[data_fd].push((struct file_chunk) {*data_header, data_pkt, false, 0, 0});
+
+//                            sendALL(next_hop_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+//                            update_last_data_packet(data_pkt);
 //                            close(next_hop_fd);
                             LOG("FWD data pkt id:" << transfer_id << " seq:" << ((int) ntohs(data_header->seq_no)) <<
                                 " ttl:" <<
@@ -292,6 +304,65 @@ namespace data {
             delete[](cntrl_response);
         }
     }
+
+    void get_write_set(fd_set &writefds) {
+        FD_ZERO(&writefds);
+        for (std::map<int, std::queue<struct file_chunk> >::iterator it = send_buffer.begin();
+             it != send_buffer.end(); ++it) {
+            if (!(it->second).empty()) {
+                FD_SET(it->first, &writefds);
+            }
+        }
+    }
+
+    void write_handler(int sock_fd) {
+        while (!send_buffer[sock_fd].empty()) {
+            struct file_chunk chunk = send_buffer[sock_fd].front();
+//            LOG("Write: " << (int) chunk.header.transfer_id);
+
+//            ssize_t nbytes = DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, n = 0;
+
+//            while (chunk.sent < nbytes) {
+////                n = send(sock_fd, chunk.payload + chunk.sent, (size_t) (nbytes - chunk.sent), MSG_DONTWAIT);
+//                n = send(sock_fd, chunk.payload + chunk.sent, (size_t) (nbytes - chunk.sent), 0);
+//                if (n == -1) {
+//                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+//                        break;
+//                    }
+//                }
+//                chunk.sent += n;
+//                LOG("Wrote: " << chunk.sent);
+//            }
+//            sendALL(sock_fd, chunk.payload, nbytes);
+
+            ssize_t bytes = 0, n = 0;
+
+            bytes = send(sock_fd, chunk.payload, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, MSG_DONTWAIT);
+
+            int flags = MSG_DONTWAIT;
+            while (bytes < DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE) {
+                n = send(sock_fd, chunk.payload + bytes,
+                         (DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE) - bytes, flags);
+                if (n <= 0) {
+                    ERROR("sendALL: " << strerror(errno));
+                    flags = 0;
+                } else if (n > 0) {
+                    bytes += n;
+                    flags = MSG_DONTWAIT;
+                }
+            }
+
+            if (chunk.is_origin && chunk.header.fin) {
+                // send controller response
+                char *cntrl_response_header = create_response_header(chunk.controller_fd, controller::SENDFILE, 0, 0);
+                sendALL(chunk.controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+                delete[](cntrl_response_header);
+                LOG("Sent file " << ((int) chunk.header.transfer_id));
+            }
+            send_buffer[sock_fd].pop();
+        }
+    }
+
 
     void update_last_data_packet(char *payload) {
         if (penultimate != NULL && last != NULL) {

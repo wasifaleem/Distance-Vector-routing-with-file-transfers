@@ -13,13 +13,14 @@
 #include <controller.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <Router.h>
 
 typedef uint16_t router_id, cost;
 typedef std::map<router_id, cost> distance_vector; // dv:{ router_id: cost}
 
 static router *self;
 static struct routers rs;
-static unsigned update_counter = 0;
+static long update_counter = 0;
 
 void mark_inactive();
 
@@ -123,8 +124,8 @@ void process_update(ROUTING_UPDATE_HEADER *header, std::vector<ROUTING_UPDATE_EN
 void timeout_handler() {
     if (rs.update_interval != 0) {
         mark_inactive();
-        update_counter++;
-        if (update_counter == rs.update_interval) {
+        update_counter += CLOCK_TICK;
+        if (update_counter == (rs.update_interval * 1000000)) {
             send_routing_updates();
             connect_data_ports();
             update_counter = 0;

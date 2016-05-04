@@ -7,8 +7,7 @@
 #include <data_routing.h>
 
 static int control_socket, router_socket, data_socket, max_fd;
-static time_t update_interval_start = 1;
-static fd_set read_fd, all_fd;
+static fd_set read_fd, write_fd, all_fd;
 
 void Router::start() {
     LOG("Router " << util::primary_ip() << " started with: " << control_port << " as controller port.");
@@ -26,17 +25,18 @@ void Router::start() {
 
 void Router::select_loop() {
     int selret, sock_index, fd_accept;
-    struct timeval start = (struct timeval) {update_interval_start, 0};
+    struct timeval start = (struct timeval) {0, CLOCK_TICK};
     while (true) {
         read_fd = all_fd;
-        selret = select(max_fd + 1, &read_fd, NULL, NULL, &start);
+        data::get_write_set(write_fd);
+        selret = select(max_fd + 1, &read_fd, &write_fd, NULL, &start);
 
         if (selret < 0) {
             ERROR("SELECT error:" << strerror(errno));
-            exit(EXIT_FAILURE);
+            // exit(EXIT_FAILURE);
         } else if (selret == 0) {
             timeout_handler();
-            start.tv_sec = update_interval_start;
+            start = (struct timeval) {0, CLOCK_TICK};
         } else if (selret > 0) {
             for (sock_index = 0; sock_index <= max_fd; sock_index += 1) {
                 if (FD_ISSET(sock_index, &read_fd)) {
@@ -74,6 +74,8 @@ void Router::select_loop() {
                             ERROR("Unknown socket index");
                         }
                     }
+                } else if (FD_ISSET(sock_index, &write_fd)) {
+                    data::write_handler(sock_index);
                 }
             }
         }

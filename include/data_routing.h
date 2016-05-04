@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <set>
 #include <utility>
+#include <zconf.h>
 
 #define SENDFILE_PAYLOAD_HEADER_SIZE 8
 
@@ -44,5 +45,10 @@ namespace data {
     bool is_set(int sock_index);
 
     bool receive(int data_fd);
+
+    void write_handler(int sock_fd);
+
+    void get_write_set(fd_set &fd);
+
 }
 #endif //DATA_ROUTING_H

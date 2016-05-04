@@ -8,6 +8,7 @@
 #include <iostream>
 #include "controller.h"
 
+#define CLOCK_TICK 100
 
 class Router {
 public:
