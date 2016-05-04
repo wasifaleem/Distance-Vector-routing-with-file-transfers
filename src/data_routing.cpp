@@ -32,7 +32,7 @@ namespace data {
         int controller_fd;
     };
 
-    static std::map<int, std::queue<struct file_chunk*> > send_buffer;
+    static std::map<router *, std::queue<struct file_chunk*> > send_buffer;
 
     void update_last_data_packet(char *payload);
 
@@ -88,7 +88,7 @@ namespace data {
                             bzero(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             file.read(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[data_fd].push(chunk);
+                            send_buffer[next_hop].push(chunk);
                             delete[](data_header_buff);
                             delete[](data_payload_buff);
                         }
@@ -205,7 +205,7 @@ namespace data {
 
                             memcpy(chunk->payload, data_header_buff, DATA_PACKET_HEADER_SIZE);
                             memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[next_hop_fd].push(chunk);
+                            send_buffer[next_hop].push(chunk);
                             LOG("FWD data-pkt: " << *data_header);
                             delete[](data_payload_buff);
                             delete[](data_header_buff);
@@ -300,60 +300,41 @@ namespace data {
 
     void get_write_set(fd_set &writefds) {
         FD_ZERO(&writefds);
-        for (std::map<int, std::queue<struct file_chunk*> >::iterator it = send_buffer.begin();
+        for (std::map<router*, std::queue<struct file_chunk*> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
-                FD_SET(it->first, &writefds);
+                FD_SET((it->first)->data_socket_fd, &writefds);
             }
         }
     }
 
     void write_handler(int sock_fd) {
-        while (!send_buffer[sock_fd].empty()) {
-            struct file_chunk* chunk = send_buffer[sock_fd].front();
-//            LOG("Write: " << (int) chunk.header.transfer_id);
+        for (std::map<router*, std::queue<struct file_chunk*> >::iterator it = send_buffer.begin();
+             it != send_buffer.end(); ++it) {
+            router *next_hop = it->first;
 
-            ssize_t nbytes = DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, n = 0;
+            if (next_hop->data_socket_fd == sock_fd) {
+                while (!send_buffer[next_hop].empty()) {
+                    struct file_chunk* chunk = send_buffer[next_hop].front();
 
-//            while (chunk.sent < nbytes) {
-////                n = send(sock_fd, chunk.payload + chunk.sent, (size_t) (nbytes - chunk.sent), MSG_DONTWAIT);
-//                n = send(sock_fd, chunk.payload + chunk.sent, (size_t) (nbytes - chunk.sent), 0);
-//                if (n == -1) {
-//                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-//                        break;
-//                    }
-//                }
-//                chunk.sent += n;
-//                LOG("Wrote: " << chunk.sent);
-//            }
-            sendALL(sock_fd, chunk->payload, nbytes);
+                    sendALL(sock_fd, chunk->payload, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
 
-//            chunk->sent = send(sock_fd, (&chunk->payload) + chunk->sent, nbytes, MSG_DONTWAIT);
-//            int flags = MSG_DONTWAIT;
-//            while (chunk->sent < nbytes) {
-//                n = send(sock_fd, (&chunk->payload) + chunk->sent, nbytes - chunk->sent, flags);
-//                if (n <= 0) {
-//                    ERROR("sendALL: " << strerror(errno));
-//                    flags = 0;
-//                    return;
-//                } else if (n > 0) {
-//                    chunk->sent += n;
-//                    flags = MSG_DONTWAIT;
-//                }
-//            }
-//            LOG("Sent: " << chunk.header);
-            if (chunk->is_origin && chunk->header.fin) {
-                // send controller response
-                char *cntrl_response_header = create_response_header(chunk->controller_fd, controller::SENDFILE, 0, 0);
-                sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-                delete[](cntrl_response_header);
-                LOG("Sent file: " << chunk->header);
+
+                    if (chunk->is_origin && chunk->header.fin) {
+                        // send controller response
+                        char *cntrl_response_header = create_response_header(chunk->controller_fd, controller::SENDFILE, 0, 0);
+                        sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+                        delete[](cntrl_response_header);
+                        LOG("Sent file: " << chunk->header);
+                    }
+                    send_buffer[next_hop].pop();
+                    delete[] chunk->payload;
+                    delete chunk;
+                    break;
+                }
             }
-            send_buffer[sock_fd].pop();
-            delete[] chunk->payload;
-            delete chunk;
-            break;
         }
+
     }
 
 
