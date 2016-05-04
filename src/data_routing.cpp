@@ -31,8 +31,16 @@ namespace data {
         bool is_origin;
         int controller_fd;
     };
+    struct transfer_key {
+        uint8_t transfer_id;
+        router *next_hop;
 
-    static std::map<uint8_t, std::queue<struct file_chunk *> > send_buffer;
+        bool operator<(const transfer_key &o) const {
+            return transfer_id < o.transfer_id;
+        }
+    };
+
+    static std::map<transfer_key, std::queue<struct file_chunk *> > send_buffer;
 
     void update_last_data_packet(char *payload);
 
@@ -87,7 +95,8 @@ namespace data {
                             file.read(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff,
                                    DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[next_hop->router_id].push(chunk);
+                            struct transfer_key key = {copy.transfer_id, next_hop};
+                            send_buffer[key].push(chunk);
                             delete[](data_header_buff);
                             delete[](data_payload_buff);
                         }
@@ -179,7 +188,7 @@ namespace data {
                     file_data[data_header->transfer_id].clear();
                     LOG("RECEIVED file: " << file_name);
                 } else {
-                    LOG("RECEIVED seq-no: " << *data_header);
+//                    LOG("RECEIVED seq-no: " << *data_header);
                 }
             } else { // Forward to next hop
                 route *route = route_for_destination(data_header->dest_ip);
@@ -201,7 +210,8 @@ namespace data {
                             memcpy(chunk->payload, data_header_buff, DATA_PACKET_HEADER_SIZE);
                             memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff,
                                    DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[next_hop->router_id].push(chunk);
+                            struct transfer_key key = {data_header->transfer_id, next_hop};
+                            send_buffer[key].push(chunk);
                             delete[](data_payload_buff);
                             delete[](data_header_buff);
                         } else {
@@ -295,22 +305,22 @@ namespace data {
 
     void get_write_set(fd_set &writefds) {
         FD_ZERO(&writefds);
-        for (std::map<uint8_t, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
+        for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
-                FD_SET((find_by_id(it->first))->data_socket_fd, &writefds);
+                FD_SET(it->first.next_hop->data_socket_fd, &writefds);
             }
         }
     }
 
     void write_handler(int sock_fd) {
-        for (std::map<uint8_t, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
+        for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
-            router *next_hop = find_by_id(it->first);
+            router *next_hop = it->first.next_hop;
 
             if (next_hop->data_socket_fd == sock_fd) {
-                while (!send_buffer[next_hop->router_id].empty()) {
-                    struct file_chunk *chunk = send_buffer[next_hop->router_id].front();
+                while (!send_buffer[it->first].empty()) {
+                    struct file_chunk *chunk = send_buffer[it->first].front();
 
                     sendALL(sock_fd, chunk->payload, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
 
@@ -330,7 +340,7 @@ namespace data {
                     stats[chunk->header.transfer_id].insert(
                             std::pair<uint8_t, uint16_t>(chunk->header.ttl, ntohs(chunk->header.seq_no)));
 
-                    send_buffer[next_hop->router_id].pop();
+                    send_buffer[it->first].pop();
                     update_last_data_packet(chunk->payload);
                     delete chunk;
                     break;
@@ -339,7 +349,6 @@ namespace data {
         }
 
     }
-
 
     void update_last_data_packet(char *payload) {
         if (penultimate != NULL && last != NULL) {
