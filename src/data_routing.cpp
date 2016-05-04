@@ -30,7 +30,6 @@ namespace data {
         char * payload;
         bool is_origin;
         int controller_fd;
-        ssize_t sent;
     };
 
     static std::map<int, std::queue<struct file_chunk*> > send_buffer;
@@ -77,13 +76,11 @@ namespace data {
                             }
                             data_header->padding = 0;
 
-                            LOG(".");
                             struct file_chunk* chunk = new file_chunk();
                             chunk->payload = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
                             chunk->header = *data_header;
                             chunk->is_origin = true;
                             chunk->controller_fd = controller_fd;
-                            chunk->sent = 0;
 
                             memcpy(chunk->payload, data_header_buff, DATA_PACKET_HEADER_SIZE);
 
@@ -205,7 +202,6 @@ namespace data {
                             chunk->header = *data_header;
                             chunk->is_origin = false;
                             chunk->controller_fd = 0;
-                            chunk->sent = 0;
 
                             memcpy(chunk->payload, data_header_buff, DATA_PACKET_HEADER_SIZE);
                             memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
@@ -356,6 +352,7 @@ namespace data {
             send_buffer[sock_fd].pop();
             delete[] chunk->payload;
             delete chunk;
+            break;
         }
     }
 
