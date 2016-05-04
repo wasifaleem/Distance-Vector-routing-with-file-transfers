@@ -349,7 +349,6 @@ void update_cost(int controller_fd, char *payload) {
     uint16_t cost = util::ntohui16(payload, offset);
     rs.routers[id].cost = cost;
     distance_vectors[self->router_id][id] = cost;
-//    routing_table[id] = (struct route) {INF, INF}; // TODO: need this?
     recompute_routing_table();
 }
 

@@ -187,6 +187,7 @@ namespace data {
                     os.close();
                     file_data[data_header->transfer_id].clear();
                     LOG("RECEIVED file: " << file_name);
+                    LOG("RECEIVED file last-pkt: " << *data_header);
                 } else {
 //                    LOG("RECEIVED seq-no: " << *data_header);
                 }

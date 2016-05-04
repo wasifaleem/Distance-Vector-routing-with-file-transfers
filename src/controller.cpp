@@ -65,6 +65,7 @@ namespace controller {
 
         char *cntrl_header, *cntrl_payload;
         uint8_t control_code;
+        uint8_t response_time;
         uint16_t payload_len;
 
         /* Get control header */
@@ -79,6 +80,7 @@ namespace controller {
 
         struct CONTROL_HEADER *header = (struct CONTROL_HEADER *) cntrl_header;
         control_code = header->control_code;
+        response_time = header->response_time;
         payload_len = ntohs(header->payload_len);
 
         free(cntrl_header);
@@ -119,6 +121,7 @@ namespace controller {
             }
             case SENDFILE: {
                 data::sendfile(controller_fd, cntrl_payload, payload_len);
+                LOG("Send file in: " << static_cast<unsigned>(response_time) << " secs.");
                 break;
             }
             case SENDFILE_STATS: {
