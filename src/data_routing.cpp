@@ -100,12 +100,12 @@ namespace data {
                     }
 //                    close(data_fd);
                 } else {
-                    ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
-                          route->next_hop_id);
+                    ERROR("Cannot connect to data port" << unsigned(next_hop->data_port) << " of router by id: " <<
+                                  unsigned(route->next_hop_id));
                 }
             } else {
                 // Should not happen, assume dest exists
-                ERROR("Cannot find router by id: " << route->next_hop_id);
+                ERROR("Cannot find router by id: " << unsigned(route->next_hop_id));
             }
         } else {
             // Should not happen, assume dest exists
@@ -164,10 +164,10 @@ namespace data {
         // update stats
         stats[data_header->transfer_id].insert(
                 std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
-        int transfer_id = (int) data_header->transfer_id;
+        unsigned transfer_id = data_header->transfer_id;
 
         if (data_header->ttl == 0) {
-            LOG("Drop data pkt: end of TTL for id:" << transfer_id << " seq:" << ntohs(data_header->seq_no));
+            LOG("Drop data pkt: end of TTL for id:" << transfer_id << " seq:" << unsigned(ntohs(data_header->seq_no)));
             delete[](data_header_buff);
             return true;
         } else {
@@ -187,7 +187,7 @@ namespace data {
                     file_data[data_header->transfer_id].clear();
                     LOG("RECEIVED file: " << file_name);
                 } else {
-                    LOG("RECEIVED seq-no: " << ((int) ntohs(data_header->seq_no)) << " of transfer: " << transfer_id);
+                    LOG("RECEIVED seq-no: " << unsigned(ntohs(data_header->seq_no)) << " of transfer: " << transfer_id);
                 }
             } else { // Forward to next hop
                 route *route = route_for_destination(data_header->dest_ip);
@@ -212,16 +212,16 @@ namespace data {
 //                            sendALL(next_hop_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
 //                            update_last_data_packet(data_pkt);
 //                            close(next_hop_fd);
-                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ((int) ntohs(data_header->seq_no)) <<
-                                " ttl:" <<
-                                ((int) data_header->ttl));
+                            LOG("FWD data pkt id:" << transfer_id << " seq:" << unsigned(ntohs(data_header->seq_no)) <<
+                                " ttl:" << unsigned(data_header->ttl));
                         } else {
-                            ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
-                                  route->next_hop_id);
+                            ERROR("Cannot connect to data port" << unsigned(next_hop->data_port) <<
+                                  " of router by id: " <<
+                                  unsigned(route->next_hop_id));
                         }
                     } else {
                         // Should not happen, assume dest exists
-                        ERROR("Cannot find router by id: " << route->next_hop_id);
+                        ERROR("Cannot find router by id: " << unsigned(route->next_hop_id));
                     }
                 } else {
                     // Should not happen, assume dest exists
@@ -320,7 +320,7 @@ namespace data {
             struct file_chunk chunk = send_buffer[sock_fd].front();
 //            LOG("Write: " << (int) chunk.header.transfer_id);
 
-//            ssize_t nbytes = DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, n = 0;
+            ssize_t nbytes = DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, n = 0;
 
 //            while (chunk.sent < nbytes) {
 ////                n = send(sock_fd, chunk.payload + chunk.sent, (size_t) (nbytes - chunk.sent), MSG_DONTWAIT);
@@ -335,19 +335,16 @@ namespace data {
 //            }
 //            sendALL(sock_fd, chunk.payload, nbytes);
 
-            ssize_t bytes = 0, n = 0;
-
-            bytes = send(sock_fd, chunk.payload, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE, MSG_DONTWAIT);
-
+            chunk.sent = send(sock_fd, chunk.payload + chunk.sent, nbytes, MSG_DONTWAIT);
             int flags = MSG_DONTWAIT;
-            while (bytes < DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE) {
-                n = send(sock_fd, chunk.payload + bytes,
-                         (DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE) - bytes, flags);
+            while (chunk.sent < nbytes) {
+                n = send(sock_fd, chunk.payload + chunk.sent, nbytes - chunk.sent, flags);
                 if (n <= 0) {
                     ERROR("sendALL: " << strerror(errno));
                     flags = 0;
+                    return;
                 } else if (n > 0) {
-                    bytes += n;
+                    chunk.sent += n;
                     flags = MSG_DONTWAIT;
                 }
             }
@@ -357,7 +354,7 @@ namespace data {
                 char *cntrl_response_header = create_response_header(chunk.controller_fd, controller::SENDFILE, 0, 0);
                 sendALL(chunk.controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
                 delete[](cntrl_response_header);
-                LOG("Sent file " << ((int) chunk.header.transfer_id));
+                LOG("Sent file " << unsigned(chunk.header.transfer_id));
             }
             send_buffer[sock_fd].pop();
         }
