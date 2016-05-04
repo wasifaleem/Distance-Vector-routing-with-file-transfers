@@ -156,30 +156,30 @@ namespace data {
                 std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
         int transfer_id = (int) data_header->transfer_id;
 
-        const router *self = get_self();
-        if (self->ip == data_header->dest_ip) {
-            file_data[data_header->transfer_id].insert(file_data[data_header->transfer_id].end(), data_payload_buff,
-                                                       data_payload_buff + DATA_PACKET_PAYLOAD_SIZE);
-            if (data_header->fin) {
-                std::stringstream ss;
-                ss << "file-" << transfer_id;
-                std::string file_name = ss.str();
-                // write file data.
-                std::ofstream os(file_name.c_str(), std::ios::binary | std::ios::out | std::ios::trunc);
-                std::copy(file_data[data_header->transfer_id].begin(), file_data[data_header->transfer_id].end(),
-                          std::ostreambuf_iterator<char>(os));
-                os.close();
-                file_data[data_header->transfer_id].clear();
-                LOG("RECEIVED file: " << file_name);
-            } else {
-                LOG("RECEIVED seq-no: " << ((int) ntohs(data_header->seq_no)) << " of transfer: " << transfer_id);
-            }
-        } else { // Forward to next hop
-            if (data_header->ttl == 0) {
-                LOG("Drop data pkt: end of TTL for id:" << transfer_id << " seq:" << ntohs(data_header->seq_no));
-                delete[](data_header_buff);
-                return true;
-            } else {
+        if (data_header->ttl == 0) {
+            LOG("Drop data pkt: end of TTL for id:" << transfer_id << " seq:" << ntohs(data_header->seq_no));
+            delete[](data_header_buff);
+            return true;
+        } else {
+            const router *self = get_self();
+            if (self->ip == data_header->dest_ip) {
+                file_data[data_header->transfer_id].insert(file_data[data_header->transfer_id].end(), data_payload_buff,
+                                                           data_payload_buff + DATA_PACKET_PAYLOAD_SIZE);
+                if (data_header->fin) {
+                    std::stringstream ss;
+                    ss << "file-" << transfer_id;
+                    std::string file_name = ss.str();
+                    // write file data.
+                    std::ofstream os(file_name.c_str(), std::ios::binary | std::ios::out | std::ios::trunc);
+                    std::copy(file_data[data_header->transfer_id].begin(), file_data[data_header->transfer_id].end(),
+                              std::ostreambuf_iterator<char>(os));
+                    os.close();
+                    file_data[data_header->transfer_id].clear();
+                    LOG("RECEIVED file: " << file_name);
+                } else {
+                    LOG("RECEIVED seq-no: " << ((int) ntohs(data_header->seq_no)) << " of transfer: " << transfer_id);
+                }
+            } else { // Forward to next hop
                 route *route = route_for_destination(data_header->dest_ip);
                 if (route != NULL && route->cost != INF) {
                     router *next_hop = find_by_id(route->next_hop_id);
