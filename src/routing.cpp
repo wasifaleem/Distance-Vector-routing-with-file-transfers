@@ -328,6 +328,7 @@ void routing_table_response(int controller_fd) {
 
     response_len = CNTRL_RESP_HEADER_SIZE + payload_len;
     cntrl_response = new char[response_len];
+    bzero(cntrl_response, response_len);
     /* Copy Header */
     memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
     delete[](cntrl_response_header);

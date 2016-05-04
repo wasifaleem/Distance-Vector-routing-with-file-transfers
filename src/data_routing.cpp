@@ -186,8 +186,8 @@ namespace data {
                     if (next_hop != NULL) {
                         int next_hop_fd = next_hop->data_socket_fd;
                         if (next_hop_fd != 0 || util::connect_to(&next_hop_fd, next_hop->ip_str.c_str(),
-                                                             util::to_port_str(next_hop->data_port).c_str(),
-                                                             SOCK_STREAM)) {
+                                                                 util::to_port_str(next_hop->data_port).c_str(),
+                                                                 SOCK_STREAM)) {
                             next_hop->data_socket_fd = next_hop_fd;
                             char *data_pkt = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
                             /* Copy Header */
@@ -200,8 +200,9 @@ namespace data {
                             sendALL(next_hop_fd, data_pkt, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
                             update_last_data_packet(data_pkt);
 //                            close(next_hop_fd);
-                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ((int)ntohs(data_header->seq_no)) << " ttl:" <<
-                                ((int)data_header->ttl));
+                            LOG("FWD data pkt id:" << transfer_id << " seq:" << ((int) ntohs(data_header->seq_no)) <<
+                                " ttl:" <<
+                                ((int) data_header->ttl));
                         } else {
                             ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
                                   route->next_hop_id);
@@ -221,6 +222,76 @@ namespace data {
         return true;
     }
 
+    void sendfile_stats(int sock_fd, char *payload) {
+        unsigned offset = 0;
+        uint8_t transfer_id = util::toui8(payload, offset);
+        unsigned long count = stats[transfer_id].size();
+        if (count != 0) {
+            uint16_t payload_len = 4 + (count * 2);
+            char *cntrl_payload = new char[payload_len];
+            bzero(cntrl_payload, payload_len);
+            struct SENDFILE_STATS_HEADER *header = (struct SENDFILE_STATS_HEADER *) cntrl_payload;
+            header->transfer_id = transfer_id;
+            header->padding = htons(0);
+            offset = 4;
+
+            for (std::set<std::pair<uint8_t, uint16_t> >::iterator it = stats[transfer_id].begin();
+                 it != stats[transfer_id].end(); ++it) {
+                header->ttl = (*it).first;
+                uint16_t seq_no = htons(it->second);
+                memcpy(cntrl_payload + offset, &seq_no, sizeof(uint16_t));
+                offset += 2;
+            }
+            char *cntrl_header = create_response_header(sock_fd, controller::SENDFILE_STATS, 0, payload_len);
+            char *cntrl_response = new char[CNTRL_RESP_HEADER_SIZE + payload_len];
+            bzero(cntrl_response, CNTRL_RESP_HEADER_SIZE + payload_len);
+
+            /* Copy Header */
+            memcpy(cntrl_response, cntrl_header, CNTRL_RESP_HEADER_SIZE);
+            delete[](cntrl_header);
+            /* Copy Payload */
+            memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, cntrl_payload, payload_len);
+            sendALL(sock_fd, cntrl_response, CNTRL_RESP_HEADER_SIZE + payload_len);
+            delete[](cntrl_response);
+        }
+    }
+
+    void last_data_pkt(int sock_fd) {
+        if (last != NULL) {
+            char *cntrl_header = create_response_header(sock_fd, controller::LAST_DATA_PACKET, 0,
+                                                        DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+            size_t response_len = CNTRL_RESP_HEADER_SIZE + DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE;
+            char *cntrl_response = new char[response_len];
+            bzero(cntrl_response, response_len);
+
+            /* Copy Header */
+            memcpy(cntrl_response, cntrl_header, CNTRL_RESP_HEADER_SIZE);
+            delete[](cntrl_header);
+            /* Copy Payload */
+            memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, last, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+            sendALL(sock_fd, cntrl_response, response_len);
+            delete[](cntrl_response);
+        }
+    }
+
+    void penultimate_data_pkt(int sock_fd) {
+        if (penultimate != NULL) {
+            char *cntrl_header = create_response_header(sock_fd, controller::PENULTIMATE_DATA_PACKET, 0,
+                                                        DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+            size_t response_len = CNTRL_RESP_HEADER_SIZE + DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE;
+            char *cntrl_response = new char[response_len];
+            bzero(cntrl_response, response_len);
+
+            /* Copy Header */
+            memcpy(cntrl_response, cntrl_header, CNTRL_RESP_HEADER_SIZE);
+            delete[](cntrl_header);
+            /* Copy Payload */
+            memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, penultimate,
+                   DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
+            sendALL(sock_fd, cntrl_response, response_len);
+            delete[](cntrl_response);
+        }
+    }
 
     void update_last_data_packet(char *payload) {
         if (penultimate != NULL && last != NULL) {

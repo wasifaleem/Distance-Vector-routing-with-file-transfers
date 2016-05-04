@@ -27,7 +27,17 @@ namespace data {
         unsigned padding:31;
     };
 
+    struct __attribute__((__packed__)) SENDFILE_STATS_HEADER {
+        uint8_t transfer_id;
+        uint8_t ttl;
+        uint16_t padding;
+    };
+
     void sendfile(int sock_fd, char *payload, uint16_t ctrl_payload_len);
+
+    void sendfile_stats(int sock_fd, char *payload);
+    void last_data_pkt(int sock_fd);
+    void penultimate_data_pkt(int sock_fd);
 
     int new_data_conn(int sock_index);
 

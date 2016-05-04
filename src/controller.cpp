@@ -121,12 +121,18 @@ namespace controller {
                 data::sendfile(controller_fd, cntrl_payload, payload_len);
                 break;
             }
-            case SENDFILE_STATS:
+            case SENDFILE_STATS: {
+                data::sendfile_stats(controller_fd, cntrl_payload);
                 break;
-            case LAST_DATA_PACKET:
+            }
+            case LAST_DATA_PACKET: {
+                data::last_data_pkt(controller_fd);
                 break;
-            case PENULTIMATE_DATA_PACKET:
+            }
+            case PENULTIMATE_DATA_PACKET: {
+                data::penultimate_data_pkt(controller_fd);
                 break;
+            }
         }
 
         if (payload_len != 0) free(cntrl_payload);
