@@ -205,7 +205,7 @@ namespace data {
 
                             memcpy(chunk->payload, data_header_buff, DATA_PACKET_HEADER_SIZE);
                             memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[data_fd].push(chunk);
+                            send_buffer[next_hop_fd].push(chunk);
                             LOG("FWD data-pkt: " << *data_header);
                             delete[](data_payload_buff);
                             delete[](data_header_buff);
