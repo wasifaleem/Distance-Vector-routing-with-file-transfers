@@ -27,12 +27,12 @@ namespace data {
 
     struct file_chunk {
         struct DATA_PACKET_HEADER header;
-        char * payload;
+        char *payload;
         bool is_origin;
         int controller_fd;
     };
 
-    static std::map<router *, std::queue<struct file_chunk*> > send_buffer;
+    static std::map<uint8_t, std::queue<struct file_chunk *> > send_buffer;
 
     void update_last_data_packet(char *payload);
 
@@ -60,8 +60,6 @@ namespace data {
                         long num_packets = file_size / DATA_PACKET_PAYLOAD_SIZE;
                         file.seekg(0, std::ios::beg);
                         for (int i = 0; i < num_packets; ++i) {
-                            stats[copy.transfer_id].insert(
-                                    std::pair<uint8_t, uint16_t>(copy.init_ttl, copy.init_seq_no));
                             char *data_header_buff = new char[DATA_PACKET_HEADER_SIZE];
                             bzero(data_header_buff, DATA_PACKET_HEADER_SIZE);
                             struct DATA_PACKET_HEADER *data_header = (struct DATA_PACKET_HEADER *) (data_header_buff);
@@ -76,7 +74,7 @@ namespace data {
                             }
                             data_header->padding = 0;
 
-                            struct file_chunk* chunk = new file_chunk();
+                            struct file_chunk *chunk = new file_chunk();
                             chunk->payload = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
                             chunk->header = *data_header;
                             chunk->is_origin = true;
@@ -87,18 +85,18 @@ namespace data {
                             char *data_payload_buff = new char[DATA_PACKET_PAYLOAD_SIZE];
                             bzero(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
                             file.read(data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
-                            memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[next_hop].push(chunk);
+                            memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff,
+                                   DATA_PACKET_PAYLOAD_SIZE);
+                            send_buffer[next_hop->router_id].push(chunk);
                             delete[](data_header_buff);
                             delete[](data_payload_buff);
                         }
                         file.close();
-                        LOG("Sent file " << filename << " in " << num_packets << " chunks.");
+                        LOG("Queued file " << filename << " in " << num_packets << " chunks.");
                     }
-//                    close(data_fd);
                 } else {
                     ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
-                                  route->next_hop_id);
+                          route->next_hop_id);
                 }
             } else {
                 // Should not happen, assume dest exists
@@ -158,9 +156,6 @@ namespace data {
         struct DATA_PACKET_HEADER *data_header = (struct DATA_PACKET_HEADER *) data_header_buff;
         // decrement TTL
         data_header->ttl -= 1;
-        // update stats
-        stats[data_header->transfer_id].insert(
-                std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
         unsigned transfer_id = data_header->transfer_id;
 
         if (data_header->ttl == 0) {
@@ -197,16 +192,16 @@ namespace data {
                                                                  SOCK_STREAM)) {
                             next_hop->data_socket_fd = next_hop_fd;
 
-                            struct file_chunk* chunk = new file_chunk();
+                            struct file_chunk *chunk = new file_chunk();
                             chunk->payload = new char[DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE];
                             chunk->header = *data_header;
                             chunk->is_origin = false;
                             chunk->controller_fd = 0;
 
                             memcpy(chunk->payload, data_header_buff, DATA_PACKET_HEADER_SIZE);
-                            memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff, DATA_PACKET_PAYLOAD_SIZE);
-                            send_buffer[next_hop].push(chunk);
-                            LOG("FWD data-pkt: " << *data_header);
+                            memcpy(chunk->payload + DATA_PACKET_HEADER_SIZE, data_payload_buff,
+                                   DATA_PACKET_PAYLOAD_SIZE);
+                            send_buffer[next_hop->router_id].push(chunk);
                             delete[](data_payload_buff);
                             delete[](data_header_buff);
                         } else {
@@ -300,35 +295,43 @@ namespace data {
 
     void get_write_set(fd_set &writefds) {
         FD_ZERO(&writefds);
-        for (std::map<router*, std::queue<struct file_chunk*> >::iterator it = send_buffer.begin();
+        for (std::map<uint8_t, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
-                FD_SET((it->first)->data_socket_fd, &writefds);
+                FD_SET((find_by_id(it->first))->data_socket_fd, &writefds);
             }
         }
     }
 
     void write_handler(int sock_fd) {
-        for (std::map<router*, std::queue<struct file_chunk*> >::iterator it = send_buffer.begin();
+        for (std::map<uint8_t, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
-            router *next_hop = it->first;
+            router *next_hop = find_by_id(it->first);
 
             if (next_hop->data_socket_fd == sock_fd) {
-                while (!send_buffer[next_hop].empty()) {
-                    struct file_chunk* chunk = send_buffer[next_hop].front();
+                while (!send_buffer[next_hop->router_id].empty()) {
+                    struct file_chunk *chunk = send_buffer[next_hop->router_id].front();
 
                     sendALL(sock_fd, chunk->payload, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
 
-
-                    if (chunk->is_origin && chunk->header.fin) {
-                        // send controller response
-                        char *cntrl_response_header = create_response_header(chunk->controller_fd, controller::SENDFILE, 0, 0);
-                        sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-                        delete[](cntrl_response_header);
-                        LOG("Sent file: " << chunk->header);
+                    if (chunk->is_origin) {
+                        if (chunk->header.fin) {
+                            // send controller response
+                            char *cntrl_response_header = create_response_header(chunk->controller_fd,
+                                                                                 controller::SENDFILE, 0, 0);
+                            sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+                            delete[](cntrl_response_header);
+                            LOG("Sent file: " << chunk->header);
+                        }
+                    } else {
+                        LOG("FWD data-pkt: " << chunk->header);
                     }
-                    send_buffer[next_hop].pop();
-                    delete[] chunk->payload;
+                    // update stats
+                    stats[chunk->header.transfer_id].insert(
+                            std::pair<uint8_t, uint16_t>(chunk->header.ttl, ntohs(chunk->header.seq_no)));
+
+                    send_buffer[next_hop->router_id].pop();
+                    update_last_data_packet(chunk->payload);
                     delete chunk;
                     break;
                 }
