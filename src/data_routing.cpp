@@ -36,7 +36,7 @@ namespace data {
         router *next_hop;
 
         bool operator<(const transfer_key &o) const {
-            return transfer_id < o.transfer_id;
+            return static_cast<unsigned>(transfer_id) < static_cast<unsigned>(o.transfer_id);
         }
     };
 
