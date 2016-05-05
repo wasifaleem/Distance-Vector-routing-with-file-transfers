@@ -42,7 +42,7 @@ void send_routing_updates() {
                 struct addrinfo addr;
                 if (util::udp_socket(&sock_fd, r.ip_str.c_str(), util::to_port_str(r.router_port).c_str(), &addr)
                     && sendToALL(sock_fd, payload, payload_len, &addr) > 0) {
-                    LOG("Sent update to router: " << r.router_id << " " << r.ip_str << ":" << r.router_port);
+                    LOG("Sent update to router: " << r.router_id);
                     close(sock_fd);
                 } else {
                     ERROR("Cannot send routing update to: " << r.ip_str << " err:" << strerror(errno));
@@ -114,8 +114,9 @@ void process_update(ROUTING_UPDATE_HEADER *header, std::vector<ROUTING_UPDATE_EN
             for (std::vector<ROUTING_UPDATE_ENTRY>::size_type i = 0; i != routing_updates.size(); i++) {
                 ROUTING_UPDATE_ENTRY update = routing_updates[i];
                 distance_vectors[src->router_id][update.id] = update.cost;
+                LOG(src->router_id << " -> " << update.id << " : " << update.cost);
             }
-            LOG("Received " << routing_updates.size() << " updates from:" << src->router_id);
+            LOG("Received updates from:" << src->router_id);
             recompute_routing_table();
         }
     }
@@ -171,6 +172,7 @@ void recompute_routing_table() {
                         if (std::min(min_cost, cost) != min_cost) {
                             min_cost = cost;
                             min_next_hop = neighbour.router_id;
+                            LOG("RTU " << neighbour.router_id << " -> " << destination.router_id << " : " << min_cost);
                         }
                     }
                 }
