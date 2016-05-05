@@ -25,7 +25,7 @@ void Router::start() {
 
 void Router::select_loop() {
     int selret, sock_index, fd_accept;
-    struct timeval start = (struct timeval) {CLOCK_TICK, 0};
+    struct timeval start = (struct timeval) {0, CLOCK_TICK};
     while (true) {
         read_fd = all_fd;
         data::get_write_set(write_fd);
@@ -36,7 +36,7 @@ void Router::select_loop() {
             // exit(EXIT_FAILURE);
         } else if (selret == 0) {
             timeout_handler();
-            start = (struct timeval) {CLOCK_TICK, 0};
+            start = (struct timeval) {0, CLOCK_TICK};
         } else if (selret > 0) {
             for (sock_index = 0; sock_index <= max_fd; sock_index += 1) {
                 if (FD_ISSET(sock_index, &read_fd)) {

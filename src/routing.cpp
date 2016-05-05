@@ -125,7 +125,7 @@ void timeout_handler() {
     if (rs.update_interval != 0) {
         mark_inactive();
         update_counter += CLOCK_TICK;
-        if (update_counter == (rs.update_interval)) {
+        if (update_counter == (rs.update_interval * 1000000)) {
             send_routing_updates();
             connect_data_ports();
             update_counter = 0;
