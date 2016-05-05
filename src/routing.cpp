@@ -137,7 +137,7 @@ void mark_inactive() {
     timeval now;
     gettimeofday(&now, NULL);
     for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
-        if (rs.routers[i].status == ACTIVE && rs.routers[i].type == NEIGHBOUR) {
+        if ((rs.routers[i].status != INACTIVE) && rs.routers[i].type == NEIGHBOUR) {
             timeval expected_at = (struct timeval) {rs.routers[i].last_update.tv_sec + (3 * rs.update_interval),
                                                     rs.routers[i].last_update.tv_usec};
             if (now.tv_sec >= expected_at.tv_sec) {
@@ -255,6 +255,9 @@ const routers parse_init(char *buffer) {
             r.type = SELF;
         } else {
             r.type = NEIGHBOUR;
+            timeval t;
+            gettimeofday(&t, NULL);
+            r.last_update = t;
         }
         rs.routers.push_back(r);
     }
