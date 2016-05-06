@@ -7,7 +7,7 @@
 #include <data_routing.h>
 
 static int control_socket, router_socket, data_socket, max_fd;
-static fd_set read_fd, write_fd, all_fd;
+static fd_set read_fd, write_fd, all_fd, data_write_fds;
 
 void Router::start() {
     LOG("Router " << util::primary_ip() << " started with: " << control_port << " as controller port.");
@@ -15,6 +15,7 @@ void Router::start() {
     FD_ZERO(&all_fd);
     FD_ZERO(&read_fd);
     FD_ZERO(&write_fd);
+    FD_ZERO(&data_write_fds);
 
     control_socket = controller::do_bind_listen(control_port);
 
@@ -29,6 +30,7 @@ void Router::select_loop() {
     struct timeval start = (struct timeval) {0, CLOCK_TICK};
     while (true) {
         read_fd = all_fd;
+        write_fd = data_write_fds;
 //        data::get_write_set(write_fd);
         selret = select(max_fd + 1, &read_fd, &write_fd, NULL, &start);
 
@@ -96,16 +98,16 @@ void Router::set_data_socket(int data_fd) {
 }
 
 void Router::enable_write(int data_fd) {
-    if (!FD_ISSET(data_fd, &write_fd)) {
+    if (!FD_ISSET(data_fd, &data_write_fds)) {
         LOG("enabled: " << data_fd);
-        FD_SET(data_fd, &write_fd);
+        FD_SET(data_fd, &data_write_fds);
         if (data_fd > max_fd) max_fd = data_fd;
     }
 }
 
 void Router::disable_write(int data_fd) {
-    if (FD_ISSET(data_fd, &write_fd)) {
-        FD_CLR(data_fd, &write_fd);
+    if (FD_ISSET(data_fd, &data_write_fds)) {
+        FD_CLR(data_fd, &data_write_fds);
         LOG("cleared: " << data_fd);
     }
 }
