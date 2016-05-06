@@ -14,6 +14,7 @@ void Router::start() {
 
     FD_ZERO(&all_fd);
     FD_ZERO(&read_fd);
+    FD_ZERO(&write_fd);
 
     control_socket = controller::do_bind_listen(control_port);
 
@@ -28,7 +29,7 @@ void Router::select_loop() {
     struct timeval start = (struct timeval) {0, CLOCK_TICK};
     while (true) {
         read_fd = all_fd;
-        data::get_write_set(write_fd);
+//        data::get_write_set(write_fd);
         selret = select(max_fd + 1, &read_fd, &write_fd, NULL, &start);
 
         if (selret < 0) {
@@ -94,3 +95,11 @@ void Router::set_data_socket(int data_fd) {
     if (data_socket > max_fd) max_fd = data_socket;
 }
 
+void Router::enable_write(int data_fd) {
+    FD_SET(data_fd, &write_fd);
+    if (data_fd > max_fd) max_fd = data_fd;
+}
+
+void Router::disable_write(int data_fd) {
+    FD_CLR(data_fd, &write_fd);
+}

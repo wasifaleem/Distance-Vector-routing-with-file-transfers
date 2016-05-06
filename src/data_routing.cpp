@@ -18,6 +18,7 @@
 #include <sstream>
 #include <queue>
 #include <cstdlib>
+#include <Router.h>
 
 namespace data {
     static std::set<int> data_fds;
@@ -99,6 +100,7 @@ namespace data {
                             send_buffer[key].push(chunk);
                             delete[](data_header_buff);
                             delete[](data_payload_buff);
+                            Router::enable_write(next_hop->data_socket_fd);
                         }
                         file.close();
                         LOG("Queued file " << filename << " in " << num_packets << " chunks.");
@@ -216,6 +218,7 @@ namespace data {
                             send_buffer[key].push(chunk);
                             delete[](data_payload_buff);
                             delete[](data_header_buff);
+                            Router::enable_write(next_hop->data_socket_fd);
                         } else {
                             ERROR("Cannot connect to data port" << next_hop->data_port << " of router by id: " <<
                                   route->next_hop_id);
@@ -305,17 +308,17 @@ namespace data {
         }
     }
 
-    void get_write_set(fd_set &writefds) {
-        FD_ZERO(&writefds);
-        for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
-             it != send_buffer.end(); ++it) {
-            if (!(it->second).empty()) {
-//                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
-//                std::cout << '.';
-                FD_SET(it->first.next_hop->data_socket_fd, &writefds);
-            }
-        }
-    }
+//    void get_write_set(fd_set &writefds) {
+//        FD_ZERO(&writefds);
+//        for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
+//             it != send_buffer.end(); ++it) {
+//            if (!(it->second).empty()) {
+////                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
+////                std::cout << '.';
+//                FD_SET(it->first.next_hop->data_socket_fd, &writefds);
+//            }
+//        }
+//    }
 
     void write_handler(int sock_fd) {
         for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
@@ -336,6 +339,7 @@ namespace data {
                             sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
                             delete[](cntrl_response_header);
                             LOG("Sent file: " << chunk->header);
+                            Router::disable_write(next_hop->data_socket_fd);
                         }
                     } else {
 //                        LOG("FWD data-pkt: " << chunk->header);

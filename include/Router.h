@@ -21,10 +21,15 @@ public:
 
     static void set_data_socket(int data_fd);
 
+    static void disable_write(int data_fd);
+
+    static void enable_write(int data_fd);
+
 private:
     const char *control_port;
 
     void select_loop();
+
 };
 
 #endif //ROUTER_H
