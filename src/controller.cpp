@@ -104,7 +104,10 @@ namespace controller {
                 break;
             }
             case INIT: {
-                init_response(controller_fd, cntrl_payload);
+                LOG("INIT request.");
+                if (get_self() == NULL) {
+                    init_response(controller_fd, cntrl_payload);
+                }
                 break;
             }
             case ROUTING_TABLE: {
