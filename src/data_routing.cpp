@@ -32,6 +32,7 @@ namespace data {
         bool is_origin;
         int controller_fd;
     };
+
     struct transfer_key {
         uint8_t transfer_id;
         router *next_hop;
@@ -331,19 +332,21 @@ namespace data {
 
                     sendALL(sock_fd, chunk->payload, DATA_PACKET_HEADER_SIZE + DATA_PACKET_PAYLOAD_SIZE);
 
-                    if (chunk->is_origin) {
-                        if (chunk->header.fin) {
-                            // send controller response
-                            char *cntrl_response_header = create_response_header(chunk->controller_fd,
-                                                                                 controller::SENDFILE, 0, 0);
-                            sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-                            delete[](cntrl_response_header);
-                            LOG("Sent file: " << chunk->header);
-                            Router::disable_write(next_hop->data_socket_fd);
-                        }
+                    if (chunk->is_origin && chunk->header.fin) {
+                        // send controller response
+                        char *cntrl_response_header = create_response_header(chunk->controller_fd,
+                                                                             controller::SENDFILE, 0, 0);
+                        sendALL(chunk->controller_fd, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+                        delete[](cntrl_response_header);
+                        LOG("Sent file: " << chunk->header);
                     } else {
 //                        LOG("FWD data-pkt: " << chunk->header);
                     }
+
+                    if (chunk->header.fin) {
+                        Router::disable_write(next_hop->data_socket_fd);
+                    }
+
                     // update stats
                     stats[chunk->header.transfer_id].insert(
                             std::pair<uint8_t, uint16_t>(chunk->header.ttl, ntohs(chunk->header.seq_no)));
