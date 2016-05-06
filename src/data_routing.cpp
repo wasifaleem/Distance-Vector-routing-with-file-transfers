@@ -310,7 +310,7 @@ namespace data {
         for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
-                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
+//                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
                 FD_SET(it->first.next_hop->data_socket_fd, &writefds);
             }
         }

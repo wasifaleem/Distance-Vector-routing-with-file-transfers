@@ -114,7 +114,7 @@ void process_update(ROUTING_UPDATE_HEADER *header, std::vector<ROUTING_UPDATE_EN
             for (std::vector<ROUTING_UPDATE_ENTRY>::size_type i = 0; i != routing_updates.size(); i++) {
                 ROUTING_UPDATE_ENTRY update = routing_updates[i];
                 distance_vectors[src->router_id][update.id] = update.cost;
-                LOG(src->router_id << " -> " << update.id << " : " << update.cost);
+//                LOG(src->router_id << " -> " << update.id << " : " << update.cost);
             }
             LOG("Received updates from:" << src->router_id);
             recompute_routing_table();
@@ -172,7 +172,7 @@ void recompute_routing_table() {
                         if (std::min(min_cost, cost) != min_cost) {
                             min_cost = cost;
                             min_next_hop = neighbour.router_id;
-                            LOG("RTU " << neighbour.router_id << " -> " << destination.router_id << " : " << min_cost);
+//                            LOG("RTU " << neighbour.router_id << " -> " << destination.router_id << " : " << min_cost);
                         }
                     }
                 }
@@ -205,9 +205,9 @@ route *route_for_destination(uint32_t ip) {
     for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
         struct router r = rs.routers[i];
         if (r.ip == ip) {
-            LOG("Route for " << r.router_id << " : " << r.ip_str << " via: " <<
-                routing_table[r.router_id].next_hop_id << " cost: " <<
-                routing_table[r.router_id].cost);
+//            LOG("Route for " << r.router_id << " : " << r.ip_str << " via: " <<
+//                routing_table[r.router_id].next_hop_id << " cost: " <<
+//                routing_table[r.router_id].cost);
             return &routing_table[r.router_id];
         }
     }
