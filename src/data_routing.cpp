@@ -306,11 +306,12 @@ namespace data {
     }
 
     void get_write_set(fd_set &writefds) {
-//        FD_ZERO(&writefds);
+        FD_ZERO(&writefds);
         for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
 //                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
+                std::cout << '.';
                 FD_SET(it->first.next_hop->data_socket_fd, &writefds);
             }
         }
