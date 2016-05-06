@@ -100,8 +100,8 @@ namespace data {
                             send_buffer[key].push(chunk);
                             delete[](data_header_buff);
                             delete[](data_payload_buff);
-                            Router::enable_write(next_hop->data_socket_fd);
                         }
+                        Router::enable_write(next_hop->data_socket_fd);
                         file.close();
                         LOG("Queued file " << filename << " in " << num_packets << " chunks.");
                     }

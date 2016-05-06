@@ -96,10 +96,16 @@ void Router::set_data_socket(int data_fd) {
 }
 
 void Router::enable_write(int data_fd) {
-    FD_SET(data_fd, &write_fd);
-    if (data_fd > max_fd) max_fd = data_fd;
+    if (!FD_ISSET(data_fd, &write_fd)) {
+        LOG("enabled: " << data_fd);
+        FD_SET(data_fd, &write_fd);
+        if (data_fd > max_fd) max_fd = data_fd;
+    }
 }
 
 void Router::disable_write(int data_fd) {
-    FD_CLR(data_fd, &write_fd);
+    if (FD_ISSET(data_fd, &write_fd)) {
+        FD_CLR(data_fd, &write_fd);
+        LOG("cleared: " << data_fd);
+    }
 }
