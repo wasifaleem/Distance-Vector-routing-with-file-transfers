@@ -322,6 +322,7 @@ namespace data {
 //    }
 
     void write_handler(int sock_fd) {
+        bool happened = false;
         for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             router *next_hop = it->first.next_hop;
@@ -354,11 +355,14 @@ namespace data {
                     send_buffer[it->first].pop();
                     update_last_data_packet(chunk->payload);
                     delete chunk;
+                    happened = true;
                     break;
                 }
             }
         }
-
+        if (!happened) {
+            Router::disable_write(sock_fd);
+        }
     }
 
     void update_last_data_packet(char *payload) {
