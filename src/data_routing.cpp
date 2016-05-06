@@ -192,7 +192,7 @@ namespace data {
 //                    LOG("RECEIVED seq-no: " << *data_header);
                 }
             } else { // Forward to next hop
-                LOG("Queue-ing FWD: "<< *data_header);
+//                LOG("Queue-ing FWD: "<< *data_header);
                 route *route = route_for_destination(data_header->dest_ip);
                 if (route != NULL && route->cost != INF) {
                     router *next_hop = find_by_id(route->next_hop_id);
@@ -311,7 +311,7 @@ namespace data {
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
 //                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
-                std::cout << '.';
+//                std::cout << '.';
                 FD_SET(it->first.next_hop->data_socket_fd, &writefds);
             }
         }
@@ -338,7 +338,7 @@ namespace data {
                             LOG("Sent file: " << chunk->header);
                         }
                     } else {
-                        LOG("FWD data-pkt: " << chunk->header);
+//                        LOG("FWD data-pkt: " << chunk->header);
                     }
                     // update stats
                     stats[chunk->header.transfer_id].insert(
