@@ -192,6 +192,7 @@ namespace data {
 //                    LOG("RECEIVED seq-no: " << *data_header);
                 }
             } else { // Forward to next hop
+                LOG("Queue-ing FWD: "<< *data_header);
                 route *route = route_for_destination(data_header->dest_ip);
                 if (route != NULL && route->cost != INF) {
                     router *next_hop = find_by_id(route->next_hop_id);
@@ -309,6 +310,7 @@ namespace data {
         for (std::map<transfer_key, std::queue<struct file_chunk *> >::iterator it = send_buffer.begin();
              it != send_buffer.end(); ++it) {
             if (!(it->second).empty()) {
+                LOG("Enabled write: " << static_cast<unsigned>(it->first.transfer_id));
                 FD_SET(it->first.next_hop->data_socket_fd, &writefds);
             }
         }
