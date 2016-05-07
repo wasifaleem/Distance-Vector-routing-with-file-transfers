@@ -37,7 +37,7 @@ void send_routing_updates() {
         for (std::vector<router>::iterator it = rs.routers.begin();
              it != rs.routers.end(); ++it) {
             struct router r = *it;
-            if (r.type == NEIGHBOUR && (r.status == ACTIVE || r.status == INITIALIZED)) {
+            if (r.type == NEIGHBOUR) {
                 int sock_fd;
                 struct addrinfo addr;
                 if (util::udp_socket(&sock_fd, r.ip_str.c_str(), util::to_port_str(r.router_port).c_str(), &addr)

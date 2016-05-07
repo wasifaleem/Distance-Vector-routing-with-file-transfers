@@ -177,6 +177,8 @@ namespace data {
         } else {
             const router *self = get_self();
             if (self->ip == data_header->dest_ip) {
+                update_last_data_packet(data_payload_buff);
+
                 file_data[data_header->transfer_id].insert(file_data[data_header->transfer_id].end(), data_payload_buff,
                                                            data_payload_buff + DATA_PACKET_PAYLOAD_SIZE);
                 if (data_header->fin) {
