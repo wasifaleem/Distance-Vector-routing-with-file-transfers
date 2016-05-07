@@ -178,6 +178,9 @@ namespace data {
             const router *self = get_self();
             if (self->ip == data_header->dest_ip) {
                 update_last_data_packet(data_payload_buff);
+                // update stats
+                stats[data_header->transfer_id].insert(
+                        std::pair<uint8_t, uint16_t>(data_header->ttl, ntohs(data_header->seq_no)));
 
                 file_data[data_header->transfer_id].insert(file_data[data_header->transfer_id].end(), data_payload_buff,
                                                            data_payload_buff + DATA_PACKET_PAYLOAD_SIZE);
