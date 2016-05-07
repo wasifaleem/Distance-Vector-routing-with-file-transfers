@@ -148,7 +148,7 @@ void mark_inactive() {
                     util::time_str(now.tv_sec) << "N : " << util::time_str(expected_at.tv_sec) << "E)");
                 rs.routers[i].cost = INF;
                 distance_vectors[self->router_id][rs.routers[i].router_id] = INF;
-                routing_table[rs.routers[i].router_id] = (struct route) {INF, INF};
+//                routing_table[rs.routers[i].router_id] = (struct route) {INF, INF};
                 recompute_routing_table();
             }
         }
@@ -158,7 +158,7 @@ void mark_inactive() {
 void recompute_routing_table() {
     for (std::vector<router>::size_type i = 0; i != rs.routers.size(); i++) {
         router &destination = rs.routers[i];
-        if (destination.type != SELF && destination.status != INACTIVE) {
+        if (destination.type != SELF) {
             uint16_t min_cost = INF;
             uint16_t min_next_hop = INF;
             for (std::vector<router>::size_type j = 0; j != rs.routers.size(); j++) {
